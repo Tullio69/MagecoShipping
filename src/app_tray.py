@@ -11,12 +11,23 @@ import sys
 from watcher import FolderWatcher
 from settings import load_settings, save_settings
 # aggiungi questi import
+
 import threading
 from modal import show_modal
+from fs_ops import move_with_retry, write_reason_json
+from processor import is_supported, parse_file
 
 APP_NAME = "Tray Watch Demo"
 BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
+
+# ---- STATO APP ----
+# Carica le impostazioni PRIMA di usarle
+settings = load_settings()
+WATCH_PATH = Path(settings["watch_path"])
+PROCESSED_DIR = Path(settings["processed_path"])
+FAILED_DIR = Path(settings["failed_path"])
+
 
 def resource_path(relative: str) -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -35,20 +46,43 @@ def show_modal_win32(title="Avviso", msg="Operazione completata ✅"):
     flags = MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL
     ctypes.windll.user32.MessageBoxW(None, msg, title, flags)
 
-# ---- STATO APP ----
-settings = load_settings()
-WATCH_PATH = Path(settings["watch_path"])
+# ---- STATO WATCHER ----
 paused = False
 watcher: FolderWatcher | None = None
 icon: pystray.Icon | None = None
+
+
+
 
 # ---- CALLBACK quando un file è stabile nella cartella ----
 def on_file_ready(path: Path):
     if paused:
         return
-    # Modale personalizzato con pulsante "Apri cartella"
-    msg = f"Rilevato nuovo file:\n\n• Nome: {path.name}\n• Percorso: {path.parent}"
-    show_modal("File ricevuto", msg, open_path=str(WATCH_PATH))
+
+    # 1) filtro estensioni
+    if not is_supported(path):
+        # ignoro silenziosamente o mostra modale informativa
+        return
+
+    # 2) parsing
+    ok, info = parse_file(path)
+
+    # 3) move + feedback modale
+    try:
+        if ok:
+            dest = move_with_retry(path, PROCESSED_DIR)
+            msg = f"File processato con successo.\n\n• Sorgente: {path.name}\n• Spostato in: {dest}\n\n{info}"
+            show_modal("Processato ✅", msg, open_path=str(PROCESSED_DIR))
+        else:
+            dest = move_with_retry(path, FAILED_DIR)
+            write_reason_json(dest, info)
+            msg = f"Parsing fallito.\n\n• Sorgente: {path.name}\n• Spostato in: {dest}\n• Motivo: {info}"
+            show_modal("Errore di parsing ❌", msg, open_path=str(FAILED_DIR))
+    except Exception as e:
+        # fallback: se anche lo spostamento fallisce, avvisa
+        show_modal("Errore di spostamento ❌", f"File: {path}\nDettagli: {e}")
+
+
 # ---- HANDLERS MENU ----
 def on_show_modal(icon_, item):
     # Mostra un esempio manuale
@@ -130,6 +164,8 @@ def _start_watcher():
 # ---- MAIN ----
 if __name__ == "__main__":
     WATCH_PATH.mkdir(parents=True, exist_ok=True)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    FAILED_DIR.mkdir(parents=True, exist_ok=True)
     _start_watcher()
     icon = create_icon()
     icon.run()
