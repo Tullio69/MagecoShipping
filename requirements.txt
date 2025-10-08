@@ -1,0 +1,21 @@
+# ===========================
+# MagecoShipping Dependencies
+# ===========================
+
+# 🔍 Watchdog - monitoraggio cartelle in tempo reale
+watchdog==4.0.0
+
+# 🌐 Flask - interfaccia web locale per revisione/modifica dati
+Flask==3.0.3
+
+# 🖥️ Pystray - icona e menu nella System Tray di Windows
+pystray==0.19.5
+
+# 🖼️ Pillow - richiesto da Pystray per gestire le icone
+Pillow==10.4.0
+
+# ⚙️ Requests - per eventuali comunicazioni HTTP o API future
+requests==2.32.3
+
+# 📜 Colorama - per messaggi colorati nel terminale (debug/log)
+colorama==0.4.6
