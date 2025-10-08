@@ -8,14 +8,14 @@ import tkinter as tk
 from tkinter import filedialog
 import sys
 
-from watcher import FolderWatcher
-from settings import load_settings, save_settings
+from magecoshipping.watcher.watcher import FolderWatcher
+from magecoshipping.utils.settings import load_settings, save_settings
 # aggiungi questi import
 
 import threading
-from modal import show_modal
-from fs_ops import move_with_retry, write_reason_json
-from processor import is_supported, parse_file
+from magecoshipping.utils.modal import show_modal
+from magecoshipping.utils.fs_ops import move_with_retry, write_reason_json
+from magecoshipping.processor.processor import is_supported, parse_file
 
 APP_NAME = "Tray Watch Demo"
 BASE_DIR = Path(__file__).resolve().parent
