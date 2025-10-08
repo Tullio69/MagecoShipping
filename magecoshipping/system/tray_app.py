@@ -33,7 +33,8 @@ def resource_path(relative: str) -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
     return base / relative
 
-ICON_PATH = resource_path("assets/icon.png")
+ICON_PATH = Path(__file__).resolve().parents[2] / "assets" / "icons" / "icon.png"
+
 
 # ---- MODALE NATIVO (MessageBox) ----
 MB_OK = 0x00000000
@@ -55,32 +56,26 @@ icon: pystray.Icon | None = None
 
 
 # ---- CALLBACK quando un file è stabile nella cartella ----
+from magecoshipping.processor.processor import is_supported, process_file
+
 def on_file_ready(path: Path):
+    """
+    Callback chiamata quando un file stabile viene trovato nella cartella osservata.
+    Esegue il parsing e apre la revisione WebUI per conferma / correzione / rifiuto.
+    """
     if paused:
         return
 
-    # 1) filtro estensioni
+    # 1️⃣ Verifica che sia un XML supportato
     if not is_supported(path):
-        # ignoro silenziosamente o mostra modale informativa
         return
 
-    # 2) parsing
-    ok, info = parse_file(path)
-
-    # 3) move + feedback modale
+    # 2️⃣ Avvia il processo di parsing + WebUI di revisione
     try:
-        if ok:
-            dest = move_with_retry(path, PROCESSED_DIR)
-            msg = f"File processato con successo.\n\n• Sorgente: {path.name}\n• Spostato in: {dest}\n\n{info}"
-            show_modal("Processato ✅", msg, open_path=str(PROCESSED_DIR))
-        else:
-            dest = move_with_retry(path, FAILED_DIR)
-            write_reason_json(dest, info)
-            msg = f"Parsing fallito.\n\n• Sorgente: {path.name}\n• Spostato in: {dest}\n• Motivo: {info}"
-            show_modal("Errore di parsing ❌", msg, open_path=str(FAILED_DIR))
+        print(f"📄 File stabile trovato: {path}")
+        process_file(path)
     except Exception as e:
-        # fallback: se anche lo spostamento fallisce, avvisa
-        show_modal("Errore di spostamento ❌", f"File: {path}\nDettagli: {e}")
+        show_modal("Errore di elaborazione ❌", f"Si è verificato un errore durante l'elaborazione del file:\n\n{path}\n\nDettagli: {e}")
 
 
 # ---- HANDLERS MENU ----
@@ -162,10 +157,16 @@ def _start_watcher():
     watcher.start()
 
 # ---- MAIN ----
-if __name__ == "__main__":
+def run_tray():
+    """
+    Avvia MagecoShipping come Tray App.
+    """
+    global icon
+
     WATCH_PATH.mkdir(parents=True, exist_ok=True)
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     FAILED_DIR.mkdir(parents=True, exist_ok=True)
+
     _start_watcher()
     icon = create_icon()
     icon.run()
