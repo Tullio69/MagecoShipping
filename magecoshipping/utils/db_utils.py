@@ -128,3 +128,17 @@ def get_or_create_supplier(vat_number: str, name: str, address=None, city=None, 
         new_id = c.lastrowid
         print(f"➕ Nuovo fornitore aggiunto: {name} (ID: {new_id})")
         return new_id
+
+if __name__ == "__main__":
+    print("🔍 Avvio inizializzazione database...")
+    import sqlite3
+    from magecoshipping.db.schema import DB_PATH
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = [t[0] for t in c.fetchall()]
+    print(f"📦 Tabelle trovate: {tables}")
+    conn.close()
+
+    init_database()

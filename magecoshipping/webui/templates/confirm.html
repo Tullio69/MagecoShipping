@@ -7,9 +7,9 @@
 </head>
 <body>
   <div class="container">
-    <h2>Rivedi i dati prima del salvataggio</h2>
+    <h2>Conferma o correggi i dati</h2>
     <form method="post">
-      {% for key, value in data.items() if key != 'original_path' %}
+      {% for key, value in data.items() if key not in ['original_path', 'status'] %}
         <div class="form-row">
           <label>{{ key }}</label>
           <input type="text" name="{{ key }}" value="{{ value }}">
@@ -17,7 +17,7 @@
       {% endfor %}
       <div class="buttons">
         <button type="submit" name="action" value="confirm">✅ Convalida</button>
-        <button type="submit" name="action" value="correct">✏️ Correggi e convalida</button>
+        <button type="submit" name="action" value="correct">✏️ Correggi</button>
         <button type="submit" name="action" value="reject">❌ Rifiuta</button>
       </div>
     </form>

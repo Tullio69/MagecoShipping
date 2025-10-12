@@ -14,7 +14,6 @@ class StableFileHandler(FileSystemEventHandler):
         self.folder = Path(folder)
         self.on_stable_file = on_stable_file
         self.stable_seconds = stable_seconds
-        self._last_sizes = {}
         self._stop = False
 
     def on_created(self, event):
@@ -31,22 +30,22 @@ class StableFileHandler(FileSystemEventHandler):
         Attende che il file non cambi più dimensione per N secondi consecutivi.
         """
         last_size = -1
-        same_count = 0
+        stable_time = 0.0
 
         while not self._stop:
             try:
                 size = path.stat().st_size
             except FileNotFoundError:
-                return  # file rimosso prima del tempo
+                return  # il file è stato rimosso
 
             if size == last_size:
-                same_count += 1
-                if same_count >= self.stable_seconds:
+                stable_time += 1
+                if stable_time >= self.stable_seconds:
                     print(f"📦 File stabile: {path}")
                     self.on_stable_file(path)
                     return
             else:
-                same_count = 0
+                stable_time = 0
                 last_size = size
 
             time.sleep(1.0)
@@ -57,13 +56,12 @@ class StableFileHandler(FileSystemEventHandler):
 
 class FolderWatcher:
     """
-        Gestisce l’osservazione di una cartella e il trigger dell’elaborazione file.
-        """
-
-    def __init__(self, folder: str, on_stable_file, stable_seconds: float = 3.0):
+    Gestisce l’osservazione di una cartella e il trigger dell’elaborazione file.
+    """
+    def __init__(self, folder: str, on_stable_file=None, stable_seconds: float = 3.0):
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
-        self.event_handler = StableFileHandler(self.folder, on_stable_file, stable_seconds)
+        self.event_handler = StableFileHandler(self.folder, on_stable_file or self._on_file_ready, stable_seconds)
         self.observer = Observer()
 
     def _on_file_ready(self, path: Path):
@@ -72,6 +70,14 @@ class FolderWatcher:
 
     def start(self):
         print(f"🛰️ Watcher attivo su: {self.folder}")
+
+        # 1️⃣ Elabora subito i file già presenti
+        for file in self.folder.glob("*.xml"):
+            if is_supported(file):
+                print(f"📁 File pre-esistente trovato: {file}")
+                threading.Thread(target=self.event_handler.on_stable_file, args=(file,), daemon=True).start()
+
+        # 2️⃣ Avvia l'osservatore in tempo reale
         self.observer.schedule(self.event_handler, str(self.folder), recursive=False)
         self.observer.start()
 
@@ -87,7 +93,7 @@ def start_watcher():
     Funzione di utilità per avviare il watcher in un thread separato (richiamata da tray_app).
     """
     watch_folder = Path(__file__).resolve().parents[2] / "watched"
-    watcher = FolderWatcher(watch_folder)
+    watcher = FolderWatcher(str(watch_folder))
     watcher.start()
 
     try:
