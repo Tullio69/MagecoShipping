@@ -1,83 +1,38 @@
 import sqlite3
 from pathlib import Path
-import json
-
-DB_PATH = Path(__file__).resolve().parents[1] / "db" / "database.sqlite3"
+from magecoshipping.db.schema import DB_PATH
 
 
-def init_db():
-    """Crea le tabelle se non esistono già."""
+# ===============================
+# 🔹 Funzioni di inizializzazione
+# ===============================
+
+def get_connection():
+    """Crea e restituisce una connessione SQLite."""
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
+    conn.row_factory = sqlite3.Row
+    return conn
 
-    # Tabella fornitori
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS suppliers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            denominazione TEXT NOT NULL,
-            piva TEXT NOT NULL UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
 
-    # Tabella documenti
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS documents (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_name TEXT,
-            cliente TEXT,
-            piva_cliente TEXT,
-            fornitore TEXT,
-            piva_fornitore TEXT,
-            supplier_id INTEGER,
-            data_doc TEXT,
-            num_doc TEXT,
-            totale_doc REAL,
-            status TEXT,
-            original_path TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
-        )
-    """)
-
-    # Tabella righe documento
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS document_lines (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            document_id INTEGER,
-            descrizione_rigo TEXT,
-            tratta TEXT,
-            targa TEXT,
-            tipo_veicolo TEXT,
-            costo REAL,
-            recognized INTEGER DEFAULT 0,
-            include INTEGER DEFAULT 1,
-            FOREIGN KEY (document_id) REFERENCES documents(id)
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
+# ======================================
+# 🔹 Funzioni di inserimento e gestione
+# ======================================
 
 def insert_or_get_supplier(fornitore: str, piva_fornitore: str) -> int:
     """
-    Cerca un fornitore per P.IVA. Se non esiste, lo crea.
+    Verifica se un fornitore esiste, altrimenti lo crea.
     Ritorna l'ID del fornitore.
     """
-    if not fornitore or not piva_fornitore:
-        return None
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT id FROM suppliers WHERE piva = ?", (piva_fornitore,))
+    cur.execute("SELECT id FROM suppliers WHERE piva_fornitore = ?", (piva_fornitore,))
     row = cur.fetchone()
     if row:
-        supplier_id = row[0]
+        supplier_id = row["id"]
     else:
         cur.execute(
-            "INSERT INTO suppliers (denominazione, piva) VALUES (?, ?)",
+            "INSERT INTO suppliers (fornitore, piva_fornitore) VALUES (?, ?)",
             (fornitore, piva_fornitore)
         )
         supplier_id = cur.lastrowid
@@ -89,42 +44,39 @@ def insert_or_get_supplier(fornitore: str, piva_fornitore: str) -> int:
 
 def insert_document(data: dict):
     """
-    Inserisce un documento e le sue righe nel database.
+    Inserisce un documento completo nel database, comprese le righe.
     """
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     cur = conn.cursor()
 
-    # Inserimento documento
+    # Inserisci documento
     cur.execute("""
         INSERT INTO documents (
-            file_name, cliente, piva_cliente,
-            fornitore, piva_fornitore, supplier_id,
-            data_doc, num_doc, totale_doc,
-            status, original_path
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            file_name, cliente, piva_cliente, fornitore, piva_fornitore,
+            num_doc, data_doc, totale_doc, status, supplier_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data.get("file_name"),
         data.get("cliente"),
         data.get("piva_cliente"),
         data.get("fornitore"),
         data.get("piva_fornitore"),
-        data.get("supplier_id"),
-        data.get("data_doc"),
         data.get("num_doc"),
-        data.get("totale_doc"),
-        data.get("status"),
-        data.get("original_path")
+        data.get("data_doc"),
+        data.get("totale_doc") or data.get("costo"),
+        data.get("status", "pending"),
+        data.get("supplier_id"),
     ))
 
     document_id = cur.lastrowid
 
-    # Inserimento righe documento
-    for line in data.get("lines", []):
+    # Inserisci righe associate (se presenti)
+    lines = data.get("lines", [])
+    for line in lines:
         cur.execute("""
             INSERT INTO document_lines (
-                document_id, descrizione_rigo, tratta, targhe,
-                tipo_veicolo, quantita_fattura, quantita_reale,
-                costo, recognized, include
+                document_id, descrizione_rigo, tratta, targhe, tipo_veicolo,
+                quantita_fattura, quantita_reale, costo, recognized, include
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             document_id,
@@ -132,49 +84,47 @@ def insert_document(data: dict):
             line.get("tratta"),
             line.get("targhe"),
             line.get("tipo_veicolo"),
-            float(line.get("quantita_fattura", 1.0)),
-            float(line.get("quantita_reale", 1.0)),
-            float(line.get("costo", 0)),
+            line.get("quantita_fattura", 1),
+            line.get("quantita_reale", 1),
+            line.get("costo", 0),
             int(line.get("recognized", False)),
-            int(line.get("include", True))
+            int(line.get("include", True)),
         ))
 
     conn.commit()
     conn.close()
-    print(f"✅ Documento '{data.get('file_name')}' e {len(data.get('lines', []))} righe salvate nel database.")
+    return document_id
 
-import sqlite3
-from magecoshipping.db.schema import DB_PATH
+
+# ======================================
+# 🔹 Funzioni di lettura e query
+# ======================================
 
 def get_documents(filter_text: str = "") -> list[dict]:
     """
-    Restituisce la lista dei documenti dal DB, con filtro opzionale per cliente / fornitore / P.IVA.
+    Restituisce la lista dei documenti dal DB,
+    con filtro opzionale per cliente / fornitore / P.IVA.
     """
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = get_connection()
     cur = conn.cursor()
 
     if filter_text:
         ft = f"%{filter_text}%"
         cur.execute("""
             SELECT id, file_name, cliente, piva_cliente, fornitore, piva_fornitore,
-                   data_doc, num_doc, totale_doc, status, date_added
+                   data_doc, num_doc, totale_doc, status, created_at
             FROM documents
             WHERE cliente LIKE ? OR fornitore LIKE ? OR piva_cliente LIKE ? OR piva_fornitore LIKE ?
-            ORDER BY date_added DESC
+            ORDER BY created_at DESC
         """, (ft, ft, ft, ft))
     else:
         cur.execute("""
             SELECT id, file_name, cliente, piva_cliente, fornitore, piva_fornitore,
-                   data_doc, num_doc, totale_doc, status, date_added
+                   data_doc, num_doc, totale_doc, status, created_at
             FROM documents
-            ORDER BY date_added DESC
+            ORDER BY created_at DESC
         """)
 
     rows = [dict(row) for row in cur.fetchall()]
     conn.close()
     return rows
-
-
-# Inizializza il DB alla prima importazione
-init_db()

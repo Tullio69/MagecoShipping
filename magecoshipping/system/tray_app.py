@@ -131,6 +131,11 @@ def on_exit(icon_, item):
     finally:
         icon_.stop()
 
+def on_open_dbview(icon_, item):
+    from magecoshipping.webui.server import start_review_server
+    start_review_server(open_page="dbview")
+
+
 # ---- MENU DINAMICO ----
 def _short(p: Path, max_len=45):
     s = str(p)
@@ -142,10 +147,12 @@ def build_menu():
         pystray.MenuItem(f"Cartella: {_short(WATCH_PATH)}", None, enabled=False),
         pystray.MenuItem("Seleziona cartella…", on_choose_folder),
         pystray.MenuItem("Apri cartella", on_open_folder),
+        pystray.MenuItem("📊 Visualizza Database", on_open_dbview),
         pystray.MenuItem(state, on_toggle_pause),
         pystray.MenuItem("Mostra avviso", on_show_modal),
         pystray.MenuItem("Esci", on_exit)
     )
+
 
 def create_icon():
     image = Image.open(ICON_PATH)

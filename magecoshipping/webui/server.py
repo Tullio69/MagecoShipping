@@ -83,6 +83,7 @@ def review():
 
 
 @app.route("/validate_text", methods=["POST"])
+
 def validate_text():
     """
     API AJAX per controllare se la descrizione rispetta le convenzioni MagecoShipping.
@@ -95,20 +96,55 @@ def validate_text():
     recognized = tratta or targa or tipo
     return jsonify({"recognized": recognized})
 
+from magecoshipping.utils.db_utils import get_documents
+
+@app.route("/dbview", methods=["GET"])
+def dbview():
+    """
+    Visualizza l'elenco dei documenti dal database con filtro di ricerca.
+    """
+    query = request.args.get("q", "")
+    try:
+        documents = get_documents(query)
+    except Exception as e:
+        return f"<h3>Errore durante il caricamento dei dati: {e}</h3>"
+
+    return render_template("dbview.html", docs=documents, query=query)
+
 
 def _run_server():
-    app.run(port=5001, debug=False)
+    """
+    Avvia il server Flask completo con tutte le route (review, dbview, edit, ecc.)
+    """
+    app.run(port=5001, debug=False, use_reloader=False)
 
 
-def start_review_server(data_dict):
-    app.config["current_data"] = data_dict
+def start_review_server(data_dict=None, open_page="review"):
+    """
+    Avvia il server Flask e apre la pagina desiderata nel browser.
+
+    Esempi:
+        start_review_server(data_dict)             -> apre /review
+        start_review_server(open_page="dbview")    -> apre /dbview
+    """
+    if data_dict:
+        app.config["current_data"] = data_dict
+
+    from threading import Thread
     thread = Thread(target=_run_server, daemon=True)
     thread.start()
-    webbrowser.open("http://localhost:5001/review")
+
+    # Attende mezzo secondo per consentire l'avvio del server
+    import time
+    time.sleep(0.5)
+
+    import webbrowser
+    webbrowser.open(f"http://localhost:5001/{open_page}")
+
 
 from magecoshipping.utils.db_utils import get_documents
 import sqlite3
-
+from magecoshipping.db.schema import DB_PATH
 @app.route("/dbview/edit/<int:doc_id>", methods=["GET", "POST"])
 def edit_document(doc_id):
     """

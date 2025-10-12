@@ -1,11 +1,19 @@
-import sqlite3
+import os
 from pathlib import Path
+import sqlite3
+from magecoshipping.db.schema import DB_PATH, init_db
 
-DB_PATH = Path(__file__).resolve().parents[1] / "db" / "database.sqlite3"
-conn = sqlite3.connect(DB_PATH)
-cur = conn.cursor()
-with open("schema.sql", "r", encoding="utf-8") as f:
-    cur.executescript(f.read())
-conn.commit()
-conn.close()
-print("✅ Database ricreato da schema.sql")
+def reset_database():
+    """
+    Elimina il file database.sqlite3 e lo rigenera dallo schema.
+    """
+    if DB_PATH.exists():
+        os.remove(DB_PATH)
+        print(f"🗑️ Database eliminato: {DB_PATH}")
+
+    # Ricrea da schema aggiornato
+    init_db()
+    print("✅ Nuovo database creato correttamente.")
+
+if __name__ == "__main__":
+    reset_database()
