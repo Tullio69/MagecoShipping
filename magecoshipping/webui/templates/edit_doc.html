@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Modifica Documento</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; background: #f4f6f8; margin: 2rem; }
+    .container { max-width: 1200px; background: #fff; padding: 1rem 1.5rem; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border-bottom: 1px solid #eee; padding: 0.4rem 0.6rem; font-size: 0.85rem; }
+    th { background: #f9f9f9; }
+    input[type=text], input[type=number] { width: 100%; padding: 0.3rem; border: 1px solid #ccc; border-radius: 4px; }
+    button { margin: 0.4rem; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; }
+    .success { background: #4CAF50; color: white; }
+    .danger { background: #d9534f; color: white; }
+    .warning { background: #f0ad4e; color: white; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>✏️ Modifica Documento #{{ doc.id }}</h2>
+    {% if msg %}<p><b>{{ msg }}</b></p>{% endif %}
+
+    <form method="post">
+      <h3>Dati documento</h3>
+      <table>
+        <tr><th>Cliente</th><td><input type="text" name="cliente" value="{{ doc.cliente }}"></td></tr>
+        <tr><th>P.IVA Cliente</th><td><input type="text" name="piva_cliente" value="{{ doc.piva_cliente }}"></td></tr>
+        <tr><th>Fornitore</th><td><input type="text" name="fornitore" value="{{ doc.fornitore }}"></td></tr>
+        <tr><th>P.IVA Fornitore</th><td><input type="text" name="piva_fornitore" value="{{ doc.piva_fornitore }}"></td></tr>
+        <tr><th>Numero Documento</th><td><input type="text" name="num_doc" value="{{ doc.num_doc }}"></td></tr>
+        <tr><th>Data Documento</th><td><input type="text" name="data_doc" value="{{ doc.data_doc }}"></td></tr>
+        <tr><th>Totale Documento</th><td><input type="number" step="0.01" name="totale_doc" value="{{ doc.totale_doc }}"></td></tr>
+        <tr><th>Status</th><td><input type="text" name="status" value="{{ doc.status }}"></td></tr>
+      </table>
+
+      <button class="success" type="submit" name="action" value="update_doc">💾 Salva Modifiche Documento</button>
+      <button class="danger" type="submit" name="action" value="delete_doc">🗑️ Elimina Documento</button>
+    </form>
+
+    <h3>Righe documento</h3>
+    {% for line in lines %}
+    <form method="post">
+      <table>
+        <tr>
+          <th>Descrizione</th><td colspan="5"><input type="text" name="descrizione_rigo_{{ line.id }}" value="{{ line.descrizione_rigo }}"></td>
+        </tr>
+        <tr>
+          <th>Tratta</th><td><input type="text" name="tratta_{{ line.id }}" value="{{ line.tratta }}"></td>
+          <th>Targhe</th><td><input type="text" name="targhe_{{ line.id }}" value="{{ line.targhe }}"></td>
+          <th>Tipo</th><td><input type="text" name="tipo_veicolo_{{ line.id }}" value="{{ line.tipo_veicolo }}"></td>
+        </tr>
+        <tr>
+          <th>Q. Fattura</th><td><input type="number" step="0.01" name="quantita_fattura_{{ line.id }}" value="{{ line.quantita_fattura }}"></td>
+          <th>Q. Reale</th><td><input type="number" step="0.01" name="quantita_reale_{{ line.id }}" value="{{ line.quantita_reale }}"></td>
+          <th>Costo</th><td><input type="number" step="0.01" name="costo_{{ line.id }}" value="{{ line.costo }}"></td>
+        </tr>
+      </table>
+      <button class="warning" type="submit" name="action" value="update_line_{{ line.id }}">✏️ Aggiorna Riga</button>
+    </form>
+    {% endfor %}
+  </div>
+</body>
+</html>

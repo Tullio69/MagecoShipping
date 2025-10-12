@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Archivio Documenti – MagecoShipping</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #f4f6f8;
+      margin: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    h2 { color: #333; margin-top: 0; }
+    form { margin-bottom: 1rem; display: flex; gap: .5rem; }
+    input[type=text] {
+      flex: 1;
+      padding: .5rem .8rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+    button, a.button {
+      padding: .5rem 1rem;
+      background: #0078d7;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      padding: .5rem .6rem;
+      border-bottom: 1px solid #eee;
+      font-size: .85rem;
+    }
+    th { background: #f2f2f2; text-align: left; }
+    tr:hover { background: #f9f9f9; }
+    .right { text-align: right; }
+    .center { text-align: center; }
+    .status-pending { color: #f0ad4e; }
+    .status-validated { color: #5cb85c; }
+    .actions a {
+      text-decoration: none;
+      color: #0078d7;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>📊 Archivio Documenti</h2>
+
+    <form method="get">
+      <input type="text" name="q" value="{{ query }}" placeholder="Cerca per cliente, fornitore o P.IVA...">
+      <button type="submit">🔍 Cerca</button>
+      <a href="/dbview" class="button" style="background:#999;">🔄 Reset</a>
+      <a href="/dbview/new" class="button" style="background:#28a745;">➕ Nuovo Documento</a>
+    </form>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Data</th>
+          <th>Cliente</th>
+          <th>Fornitore</th>
+          <th>P.IVA Cliente</th>
+          <th>P.IVA Fornitore</th>
+          <th>Numero</th>
+          <th class="right">Totale (€)</th>
+          <th class="center">Stato</th>
+          <th class="center">Azioni</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in docs %}
+        <tr>
+          <td>{{ doc.id }}</td>
+          <td>{{ doc.data_doc or '-' }}</td>
+          <td>{{ doc.cliente or '-' }}</td>
+          <td>{{ doc.fornitore or '-' }}</td>
+          <td>{{ doc.piva_cliente or '-' }}</td>
+          <td>{{ doc.piva_fornitore or '-' }}</td>
+          <td>{{ doc.num_doc or '-' }}</td>
+          <td class="right">{{ "%.2f"|format(doc.totale_doc or 0) }}</td>
+          <td class="center {{ 'status-' + (doc.status or '').lower() }}">{{ doc.status or '-' }}</td>
+          <td class="center actions">
+            <a href="/dbview/edit/{{ doc.id }}">✏️</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="center">Nessun documento trovato.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
