@@ -17,3 +17,7 @@ __pycache__/
 *.bak
 /dist/
 /processed/
+
+# Ignore SQLite databases
+*.sqlite3
+*.db
