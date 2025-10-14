@@ -21,3 +21,6 @@ __pycache__/
 # Ignore SQLite databases
 *.sqlite3
 *.db
+.vscode/
+magecoshipping/exports/
+magecoshipping/.DS_Store

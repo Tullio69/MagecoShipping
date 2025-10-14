@@ -135,6 +135,27 @@ def on_open_dbview(icon_, item):
     from magecoshipping.webui.server import start_review_server
     start_review_server(open_page="dbview")
 
+def on_open_exports(icon_, item):
+    """
+    Apre la cartella degli export (dove vengono salvati i file Excel).
+    Funziona su Windows, macOS e Linux.
+    """
+    exports_dir = ROOT_DIR / "exports"
+    exports_dir.mkdir(exist_ok=True)
+
+    try:
+        system = os.name
+        if os.name == "nt":  # Windows
+            os.startfile(str(exports_dir))
+        elif sys.platform == "darwin":  # macOS
+            import subprocess
+            subprocess.Popen(["open", exports_dir])
+        else:  # Linux o altri
+            import subprocess
+            subprocess.Popen(["xdg-open", exports_dir])
+    except Exception as e:
+        show_modal_win32("Errore", f"Impossibile aprire la cartella Export:\n\n{exports_dir}\n\nDettagli: {e}")    
+
 
 # ---- MENU DINAMICO ----
 def _short(p: Path, max_len=45):
@@ -148,6 +169,7 @@ def build_menu():
         pystray.MenuItem("Seleziona cartella…", on_choose_folder),
         pystray.MenuItem("Apri cartella", on_open_folder),
         pystray.MenuItem("📊 Visualizza Database", on_open_dbview),
+        pystray.MenuItem("📂 Visualizza Export", on_open_exports),
         pystray.MenuItem(state, on_toggle_pause),
         pystray.MenuItem("Mostra avviso", on_show_modal),
         pystray.MenuItem("Esci", on_exit)
