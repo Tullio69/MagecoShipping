@@ -1,8 +1,19 @@
-from flask import Flask, render_template, request, jsonify
-from threading import Thread
+import io
+import re
 import webbrowser
+from datetime import datetime
 from pathlib import Path
-from magecoshipping.utils.db_utils import insert_document, insert_or_get_supplier
+from threading import Thread
+
+from flask import Flask, jsonify, render_template, request, send_file
+from openpyxl import Workbook
+
+from magecoshipping.utils.db_utils import (
+    get_document_lines_map,
+    get_documents,
+    insert_document,
+    insert_or_get_supplier,
+)
 from magecoshipping.utils.fs_ops import move_with_retry
 
 
@@ -96,8 +107,6 @@ def validate_text():
     recognized = tratta or targa or tipo
     return jsonify({"recognized": recognized})
 
-from magecoshipping.utils.db_utils import get_documents
-
 @app.route("/dbview", methods=["GET"])
 def dbview():
     """
@@ -110,6 +119,105 @@ def dbview():
         return f"<h3>Errore durante il caricamento dei dati: {e}</h3>"
 
     return render_template("dbview.html", docs=documents, query=query)
+
+
+@app.route("/dbview/export", methods=["GET"])
+def export_dbview():
+    """Esporta l'elenco dei documenti e delle relative righe in formato Excel."""
+
+    query = request.args.get("q", "")
+
+    try:
+        documents = get_documents(query)
+        lines_map = get_document_lines_map([doc["id"] for doc in documents])
+    except Exception as exc:  # pragma: no cover - in caso di errori DB mostra messaggio
+        return f"<h3>Errore durante l'esportazione: {exc}</h3>", 500
+
+    workbook = Workbook()
+    ws_docs = workbook.active
+    ws_docs.title = "Documenti"
+
+    doc_headers = [
+        "ID",
+        "File",
+        "Cliente",
+        "P.IVA Cliente",
+        "Fornitore",
+        "P.IVA Fornitore",
+        "Numero",
+        "Data",
+        "Totale",
+        "Stato",
+        "Creato il",
+    ]
+    ws_docs.append(doc_headers)
+
+    for doc in documents:
+        ws_docs.append(
+            [
+                doc.get("id"),
+                doc.get("file_name"),
+                doc.get("cliente"),
+                doc.get("piva_cliente"),
+                doc.get("fornitore"),
+                doc.get("piva_fornitore"),
+                doc.get("num_doc"),
+                doc.get("data_doc"),
+                doc.get("totale_doc"),
+                doc.get("status"),
+                doc.get("created_at"),
+            ]
+        )
+
+    ws_lines = workbook.create_sheet("Righe")
+    line_headers = [
+        "Documento ID",
+        "ID Riga",
+        "Descrizione",
+        "Tratta",
+        "Targhe",
+        "Tipo Veicolo",
+        "Quantità Fattura",
+        "Quantità Reale",
+        "Costo",
+        "Recognized",
+        "Include",
+        "Creato il",
+    ]
+    ws_lines.append(line_headers)
+
+    for doc in documents:
+        for line in lines_map.get(doc["id"], []):
+            ws_lines.append(
+                [
+                    doc.get("id"),
+                    line.get("id"),
+                    line.get("descrizione_rigo"),
+                    line.get("tratta"),
+                    line.get("targhe"),
+                    line.get("tipo_veicolo"),
+                    line.get("quantita_fattura"),
+                    line.get("quantita_reale"),
+                    line.get("costo"),
+                    "Sì" if line.get("recognized") else "No",
+                    "Sì" if line.get("include") else "No",
+                    line.get("created_at"),
+                ]
+            )
+
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"magecoshipping_documenti_{timestamp}.xlsx"
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 def _run_server():

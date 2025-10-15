@@ -17,5 +17,8 @@ Pillow==10.4.0
 # ⚙️ Requests - per eventuali comunicazioni HTTP o API future
 requests==2.32.3
 
+# 📊 OpenPyXL - esportazione dei dati in formato Excel
+openpyxl==3.1.5
+
 # 📜 Colorama - per messaggi colorati nel terminale (debug/log)
 colorama==0.4.6

@@ -128,3 +128,30 @@ def get_documents(filter_text: str = "") -> list[dict]:
     rows = [dict(row) for row in cur.fetchall()]
     conn.close()
     return rows
+
+
+def get_document_lines_map(document_ids: list[int]) -> dict[int, list[dict]]:
+    """Restituisce le righe dei documenti indicati indicizzate per ``document_id``."""
+
+    if not document_ids:
+        return {}
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    placeholders = ",".join(["?"] * len(document_ids))
+    query = f"""
+        SELECT id, document_id, descrizione_rigo, tratta, targhe, tipo_veicolo,
+               quantita_fattura, quantita_reale, costo, recognized, include, created_at
+        FROM document_lines
+        WHERE document_id IN ({placeholders})
+        ORDER BY document_id, id
+    """
+    cur.execute(query, document_ids)
+
+    grouped: dict[int, list[dict]] = {}
+    for row in cur.fetchall():
+        grouped.setdefault(row["document_id"], []).append(dict(row))
+
+    conn.close()
+    return grouped
