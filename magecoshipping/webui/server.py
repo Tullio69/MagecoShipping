@@ -99,7 +99,7 @@ def validate_text():
     targa = bool(re.search(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper()))
     tipo = any(k in descr.lower() for k in ["autovettur", "autocarro", "furgon", "bus", "pullman", "moto"])
     recognized = tratta or targa or tipo
-    return jsonify({"recognized": recognized})
+    return flask.jsonify({"recognized": recognized})
 
 from magecoshipping.utils.db_utils import get_documents
 
@@ -117,64 +117,61 @@ def dbview():
     return render_template("dbview.html", docs=documents, query=query)
 
 
-from flask import redirect, url_for
+
+from flask import render_template, request, flash, redirect, url_for
+import platform, subprocess, os
+from magecoshipping.utils.db_utils import get_documents
+from magecoshipping.utils import excel
 
 @app.route("/export", methods=["GET", "POST"])
 def export_page():
     """
-    Pagina di esportazione in Excel dei documenti registrati.
-    - GET: mostra elenco documenti e form di filtro
-    - POST: genera il file Excel e apre la cartella Export (senza download browser)
+    Pagina di esportazione in Excel dei documenti con status 'validated'.
+    Permette filtro per cliente/fornitore e selezione multipla.
     """
-    import platform
-    import subprocess
-    import os
-    from flask import redirect, url_for
-
     query = request.args.get("q", "")
-    status = request.args.get("status", "")
+    status = request.args.get("status", "validated")  # default: solo validati
 
-    from magecoshipping.utils.db_utils import get_documents
-    documents = get_documents(query)
+    # 🔹 Ottieni documenti filtrati (es. solo validati)
+    try:
+        documents = get_documents(query, status_filter=status)
+    except Exception as e:
+        flash(f"❌ Errore caricamento documenti: {e}", "error")
+        documents = []
 
     if request.method == "POST":
         selected_ids = request.form.getlist("selected_ids")
 
-        # Se non è selezionato nulla, avvisa e non esporta
         if not selected_ids:
             flash("⚠️ Nessun documento selezionato per l’esportazione.", "error")
             return redirect(url_for("export_page"))
 
-        filters = {"ids": selected_ids}
         try:
-            #Crea la cartella exports
+            # Prepara i filtri per la funzione Excel
+            filters = {"ids": [int(i) for i in selected_ids]}
             excel_path = excel.export_filtered_excel(filters)
+
             flash(f"✅ File generato correttamente: {excel_path.name}", "success")
 
-            # 🔹 Apre la cartella Export in base al sistema operativo
+            # Apri la cartella export
             exports_dir = excel_path.parent
             system = platform.system()
-            if system == "Darwin":  # macOS
+            if system == "Darwin":
                 subprocess.Popen(["open", exports_dir])
             elif system == "Windows":
                 os.startfile(str(exports_dir))
-            else:  # Linux
+            else:
                 subprocess.Popen(["xdg-open", exports_dir])
 
-            # 🔹 Ritorna alla pagina export con il messaggio di successo
             return redirect(url_for("export_page"))
 
         except Exception as e:
-            flash(f"❌ Errore durante la generazione: {e}", "error")
+            flash(f"❌ Errore durante l’esportazione: {e}", "error")
             return redirect(url_for("export_page"))
 
-    # 🔹 GET: mostra la pagina
     return render_template("export.html", docs=documents, query=query, status=status)
 
-import os
-import platform
-import subprocess
-from flask import jsonify
+
 
 @app.route("/open_export_folder", methods=["POST"])
 def open_export_folder():
@@ -196,9 +193,9 @@ def open_export_folder():
         else:  # Linux
             subprocess.Popen(["xdg-open", exports_dir])
 
-        return jsonify({"success": True, "message": f"Aperta cartella: {exports_dir}"}), 200
+        return flask.jsonify({"success": True, "message": f"Aperta cartella: {exports_dir}"}), 200
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+        return flask.jsonify({"success": False, "message": str(e)}), 500
 
 
 def _run_server():

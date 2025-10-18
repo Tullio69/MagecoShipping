@@ -100,42 +100,31 @@ def insert_document(data: dict):
 # 🔹 Funzioni di lettura e query
 # ======================================
 
-def get_documents(filter_text: str = "") -> list[dict]:
-    """
-    Restituisce la lista dei documenti dal DB con filtro opzionale.
-    Il filtro ricerca in modo case-insensitive nei campi:
-    - cliente
-    - fornitore
-    - piva_cliente
-    - piva_fornitore
-
-    Se il filtro è vuoto, restituisce tutti i documenti ordinati per data di creazione (decrescente).
-    """
+def get_documents(filter_text: str = "", status_filter: str | None = None) -> list[dict]:
     conn = get_connection()
     cur = conn.cursor()
 
-    # Se è presente un filtro, normalizza e costruisci la query parametrica
-    if filter_text:
-        ft = f"%{filter_text.strip()}%"
-        cur.execute("""
-            SELECT id, file_name, cliente, piva_cliente, fornitore, piva_fornitore,
-                   data_doc, num_doc, totale_doc, status, created_at
-            FROM documents
-            WHERE LOWER(COALESCE(cliente, '')) LIKE LOWER(?)
-               OR LOWER(COALESCE(fornitore, '')) LIKE LOWER(?)
-               OR COALESCE(piva_cliente, '') LIKE ?
-               OR COALESCE(piva_fornitore, '') LIKE ?
-            ORDER BY created_at DESC
-        """, (ft, ft, ft, ft))
-    else:
-        # Nessun filtro → restituisce tutti i documenti
-        cur.execute("""
-            SELECT id, file_name, cliente, piva_cliente, fornitore, piva_fornitore,
-                   data_doc, num_doc, totale_doc, status, created_at
-            FROM documents
-            ORDER BY created_at DESC
-        """)
+    sql = """
+        SELECT id, file_name, cliente, piva_cliente, fornitore, piva_fornitore,
+               data_doc, num_doc, totale_doc, status, created_at
+        FROM documents
+        WHERE 1=1
+    """
+    params = []
 
+    if filter_text:
+        sql += " AND (cliente LIKE ? OR fornitore LIKE ? OR piva_cliente LIKE ? OR piva_fornitore LIKE ?)"
+        ft = f"%{filter_text}%"
+        params += [ft, ft, ft, ft]
+
+    if status_filter:
+        sql += " AND status = ?"
+        params.append(status_filter)
+
+    sql += " ORDER BY created_at DESC"
+
+    cur.execute(sql, params)
     rows = [dict(row) for row in cur.fetchall()]
     conn.close()
     return rows
+

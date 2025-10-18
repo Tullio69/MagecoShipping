@@ -2,304 +2,185 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Esporta Documenti - MagecoShipping</title>
+    <title>Esportazione Documenti - MagecoShipping</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        :root {
-            --blue: #3b82f6;
-            --green: #10b981;
-            --green-dark: #059669;
-            --gray-bg: #f8fafc;
-            --gray-border: #cbd5e1;
-            --text-dark: #1e293b;
-            --text-light: #475569;
-        }
-
         body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background-color: var(--gray-bg);
+            font-family: system-ui, sans-serif;
+            background: #f6f8fa;
+            color: #222;
             margin: 0;
-            padding: 2rem;
-            color: var(--text-dark);
+            padding: 0;
         }
-
+        .container {
+            max-width: 1150px;
+            margin: 30px auto;
+            background: #fff;
+            padding: 25px 40px;
+            border-radius: 12px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        }
         h1 {
-            margin-bottom: 1.5rem;
-            font-size: 1.8rem;
+            margin-bottom: 10px;
+            color: #2a4d8f;
         }
-
-        /* --- Layout principale --- */
-        .page-container {
-            max-width: 1200px;
-            margin: 0 auto;
+        form {
+            margin-top: 20px;
         }
-
-        /* --- Flash message --- */
-        #flash-container {
-            margin-bottom: 1.5rem;
-        }
-
-        .flash {
-            position: relative;
-            padding: 0.75rem 2.5rem 0.75rem 1rem;
-            border-radius: 6px;
-            font-weight: 600;
-            display: flex;
+        .filter-bar {
+            display: grid;
+            grid-template-columns: 1fr 200px 200px 100px;
+            gap: 10px;
             align-items: center;
-            justify-content: space-between;
-            margin-bottom: 0.75rem;
+            margin-bottom: 20px;
         }
-
-        .flash.success {
-            background-color: #dcfce7;
-            color: #166534;
-            border: 1px solid #22c55e;
-        }
-
-        .flash.error {
-            background-color: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #ef4444;
-        }
-
-        .flash .close-btn {
-            position: absolute;
-            right: 10px;
-            top: 8px;
-            background: none;
-            border: none;
-            color: inherit;
-            font-size: 1.2rem;
-            cursor: pointer;
-            opacity: 0.7;
-            transition: opacity 0.2s;
-        }
-
-        .flash .close-btn:hover {
-            opacity: 1;
-        }
-
-        /* --- Barra filtro --- */
-        .filter-form {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.75rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .filter-form input[type="text"] {
-            flex: 1 1 300px;
-            min-width: 250px;
-            padding: 0.6rem 0.8rem;
-            border: 1px solid var(--gray-border);
+        .filter-bar input,
+        .filter-bar select {
+            padding: 8px;
+            border: 1px solid #bbb;
             border-radius: 6px;
-            font-size: 1rem;
         }
-
-        .btn {
-            padding: 0.6rem 1.2rem;
+        .filter-bar button {
+            background: #2a4d8f;
+            color: #fff;
             border: none;
+            padding: 8px 14px;
             border-radius: 6px;
-            font-weight: 600;
             cursor: pointer;
-            transition: background-color 0.2s, transform 0.1s;
         }
-
-        .btn:active {
-            transform: scale(0.98);
+        .filter-bar button:hover {
+            background: #1f3870;
         }
-
-        .btn-filter {
-            background-color: var(--blue);
-            color: white;
-        }
-
-        .btn-export {
-            background-color: var(--green);
-            color: white;
-        }
-
-        .btn-export:hover {
-            background-color: var(--green-dark);
-        }
-
-        /* --- Tabella --- */
-        .table-wrapper {
-            overflow-x: auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-
-        table {
+        table.doc-table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 800px;
+            margin-bottom: 20px;
         }
-
-        th, td {
+        table.doc-table th,
+        table.doc-table td {
+            border-bottom: 1px solid #ddd;
+            padding: 8px;
             text-align: left;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid #e2e8f0;
-            white-space: nowrap;
         }
-
-        th {
-            background-color: #f1f5f9;
-            font-weight: 600;
+        table.doc-table th {
+            background: #2a4d8f;
+            color: #fff;
         }
-
-        tr:hover {
-            background-color: #f9fafb;
+        table.doc-table tr:hover {
+            background: #f0f4ff;
         }
-
-        td:nth-child(9),
-        td:nth-child(10),
-        th:nth-child(9),
-        th:nth-child(10) {
-            text-align: right;
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
         }
-
-        .empty {
-            text-align: center;
-            color: #94a3b8;
-            padding: 2rem;
-            background: white;
+        .actions button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .actions .export-btn {
+            background: #28a745;
+            color: #fff;
+        }
+        .actions .export-btn:hover {
+            background: #218838;
+        }
+        .actions .open-folder-btn {
+            background: #0078d7;
+            color: #fff;
+        }
+        .actions .open-folder-btn:hover {
+            background: #005ea0;
+        }
+        .msg {
+            margin-bottom: 15px;
+            padding: 10px;
             border-radius: 6px;
         }
-
-        /* --- Sezione pulsanti azione --- */
-        .action-buttons {
-            margin-top: 1.5rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        @media (max-width: 768px) {
-            body {
-                padding: 1rem;
-            }
-
-            h1 {
-                font-size: 1.4rem;
-            }
-
-            .filter-form input[type="text"] {
-                flex: 1 1 100%;
-            }
-        }
+        .msg.success { background: #d1f2d1; color: #165b16; }
+        .msg.error { background: #fbdcdc; color: #812727; }
     </style>
 </head>
-
 <body>
-    <div class="page-container">
+    <div class="container">
+        <h1>📦 Esportazione Documenti</h1>
+        <p>Filtra i documenti per <b>anno</b> e <b>cliente</b>, poi seleziona quelli da esportare.</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div id="flash-container">
-            {% for category, msg in messages %}
-            <div class="flash {{ category }}">
-                <span>{{ msg }}</span>
-                <button class="close-btn" aria-label="Chiudi messaggio">&times;</button>
-            </div>
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="msg {{ category }}">{{ message }}</div>
             {% endfor %}
-        </div>
-        {% endif %}
+          {% endif %}
         {% endwith %}
 
-        <h1>📦 Esportazione Documenti</h1>
-
-        <!-- 🔍 Form di filtro -->
-        <form method="get" action="/export" class="filter-form">
-            <input type="text" name="q" value="{{ query|default('', true) }}"
-                placeholder="Cerca per cliente, fornitore o P.IVA..." />
-            <button type="submit" class="btn btn-filter">🔍 Filtra</button>
+        <form method="get" action="/export">
+            <div class="filter-bar">
+                <input type="text" name="q" placeholder="Cerca testo libero..." value="{{ query }}">
+                <select name="anno">
+                    <option value="">Anno...</option>
+                    {% for year in anni %}
+                        <option value="{{ year }}" {% if year|string == anno|string %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+                <select name="cliente">
+                    <option value="">Cliente...</option>
+                    {% for c in clienti %}
+                        <option value="{{ c }}" {% if c == cliente %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">🔍 Filtra</button>
+            </div>
         </form>
 
-        <!-- 📊 Tabella dei risultati -->
-        {% if docs and docs|length > 0 %}
-        <form method="post" action="/export">
-            <div class="table-wrapper">
-                <table>
-                    <thead>
+        <form method="post">
+            <table class="doc-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Cliente</th>
+                        <th>Fornitore</th>
+                        <th>Numero</th>
+                        <th>Data</th>
+                        <th>Totale</th>
+                        <th>Stato</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if docs %}
+                        {% for doc in docs %}
                         <tr>
-                            <th><input type="checkbox" id="select-all" /></th>
-                            <th>ID</th>
-                            <th>Cliente</th>
-                            <th>P.IVA Cliente</th>
-                            <th>Fornitore</th>
-                            <th>P.IVA Fornitore</th>
-                            <th>Data Documento</th>
-                            <th>Numero</th>
-                            <th>Totale</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for d in docs %}
-                        <tr>
-                            <td><input type="checkbox" name="selected_ids" value="{{ d.id }}"></td>
-                            <td>{{ d.id }}</td>
-                            <td>{{ d.cliente }}</td>
-                            <td>{{ d.piva_cliente }}</td>
-                            <td>{{ d.fornitore }}</td>
-                            <td>{{ d.piva_fornitore }}</td>
-                            <td>{{ d.data_doc or '' }}</td>
-                            <td>{{ d.num_doc or '' }}</td>
-                            <td>{{ "%.2f"|format(d.totale_doc or 0) }}</td>
-                            <td>{{ d.status }}</td>
+                            <td><input type="checkbox" name="selected_ids" value="{{ doc.id }}"></td>
+                            <td>{{ doc.cliente }}</td>
+                            <td>{{ doc.fornitore }}</td>
+                            <td>{{ doc.num_doc }}</td>
+                            <td>{{ doc.data_doc }}</td>
+                            <td>{{ "%.2f"|format(doc.totale_doc or 0) }} €</td>
+                            <td>{{ doc.status }}</td>
                         </tr>
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                    {% else %}
+                        <tr><td colspan="7">Nessun documento trovato.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
 
-            <div class="action-buttons">
-                <button type="submit" class="btn btn-export">📤 Esporta selezionati</button>
-                <button type="button" id="open-folder" class="btn btn-filter">📂 Apri cartella Export</button>
+            <div class="actions">
+                <button type="submit" class="export-btn">📊 Esporta selezionati</button>
+                <button type="button" class="open-folder-btn" onclick="openExportFolder()">📁 Apri cartella export</button>
             </div>
         </form>
-        {% else %}
-        <div class="empty">Nessun documento trovato.</div>
-        {% endif %}
     </div>
 
     <script>
-        // Selezione/deselezione globale
-        const selectAll = document.getElementById("select-all");
-        if (selectAll) {
-            selectAll.addEventListener("change", () => {
-                document.querySelectorAll('input[name="selected_ids"]').forEach(cb => {
-                    cb.checked = selectAll.checked;
-                });
-            });
+        async function openExportFolder() {
+            const res = await fetch('/open_export_folder', {method: 'POST'});
+            const data = await res.json();
+            alert(data.message);
         }
-
-        // Apertura cartella export
-        const openBtn = document.getElementById("open-folder");
-        if (openBtn) {
-            openBtn.addEventListener("click", async () => {
-                try {
-                    const res = await fetch("/open_export_folder", { method: "POST" });
-                    const data = await res.json();
-                    if (!data.success) alert("Errore: " + data.message);
-                } catch (err) {
-                    alert("Impossibile aprire la cartella Export: " + err);
-                }
-            });
-        }
-
-        // Chiusura messaggi flash
-        document.querySelectorAll(".flash .close-btn").forEach(btn => {
-            btn.addEventListener("click", () => {
-                const flash = btn.parentElement;
-                flash.style.transition = "opacity 0.3s ease";
-                flash.style.opacity = "0";
-                setTimeout(() => flash.remove(), 300);
-            });
-        });
     </script>
 </body>
 </html>

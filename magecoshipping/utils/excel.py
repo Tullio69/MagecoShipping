@@ -1,139 +1,153 @@
-# magecoshipping/utils/excel_utils.py
-
+import sqlite3
+import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from openpyxl import Workbook
-from openpyxl.utils import get_column_letter
-from magecoshipping.utils.db_utils import get_documents, get_connection
+import re
+from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+from magecoshipping.db.schema import DB_PATH
 
 
-EXPORTS_DIR = Path(__file__).resolve().parent.parent / "exports"
-EXPORTS_DIR.mkdir(exist_ok=True)
-
-
-def query_records(filters: dict | None = None) -> list[dict]:
+def export_filtered_excel(filters=None) -> Path:
     """
-    Recupera i record dal DB in base ai filtri.
-    Supporta:
-      - filters["ids"]: lista di ID selezionati
-      - filters["q"] o filters["cliente"]: ricerca testuale
+    Esporta i documenti filtrati (o selezionati) in un file Excel formattato.
+    Regole:
+      - Solo righe con include = 1
+      - Duplicazione righe per targhe multiple
+      - Quantità e Num Mezzi sempre = 1
+      - Costo unitario = costo_totale / num_targhe
     """
-    if not filters:
-        return get_documents("")
+    exports_dir = Path(__file__).resolve().parents[1] / "exports"
+    exports_dir.mkdir(exist_ok=True)
 
-    # 1️⃣ Se l’utente ha selezionato ID specifici
-    if "ids" in filters and filters["ids"]:
-        ids = [int(x) for x in filters["ids"] if str(x).isdigit()]
-        if not ids:
-            return []
-        conn = get_connection()
-        cur = conn.cursor()
-        placeholders = ",".join("?" for _ in ids)
-        sql = f"""
-            SELECT id, file_name, cliente, piva_cliente, fornitore, piva_fornitore,
-                   data_doc, num_doc, totale_doc, status, created_at
-            FROM documents
-            WHERE id IN ({placeholders})
-            ORDER BY created_at DESC
-        """
-        cur.execute(sql, ids)
-        rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return rows
+    output_path = exports_dir / f"Report_Mageco_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
-    # 2️⃣ Altrimenti usa il filtro testuale classico
-    filter_text = (
-        (filters.get("q") or "").strip()
-        or (filters.get("cliente") or "").strip()
-    )
-    return get_documents(filter_text)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
 
-def generate_excel(records: list[dict], file_name: str | None = None) -> Path:
-    """
-    Genera un file Excel con i record forniti e restituisce il percorso completo.
-    """
-    if not records:
-        raise ValueError("Nessun record fornito per l'esportazione.")
+    # 🔹 Recupera i documenti da esportare
+    if filters and "ids" in filters:
+        placeholders = ",".join("?" for _ in filters["ids"])
+        cur.execute(f"SELECT * FROM documents WHERE id IN ({placeholders})", filters["ids"])
+    else:
+        cur.execute("SELECT * FROM documents ORDER BY date_added DESC")
 
-    # Generazione nome file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = file_name or f"mageco_export_{timestamp}.xlsx"
-    output_path = EXPORTS_DIR / safe_name
+    documents = [dict(row) for row in cur.fetchall()]
+    wb_writer = pd.ExcelWriter(output_path, engine="openpyxl")
 
-    # Crea il workbook
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Spedizioni"
+    for doc in documents:
+        doc_id = doc["id"]
 
-    # Intestazioni colonne
-    headers = list(records[0].keys())
-    ws.append(headers)
+        # 🔹 Intestazione documento
+        header_data = {
+            "Soggetto Certificatore": doc.get("fornitore", ""),
+            "Cliente": doc.get("cliente", ""),
+            "Partita IVA Cliente": doc.get("piva_cliente", ""),
+        }
 
-    # Righe dati
-    for rec in records:
-        ws.append([rec.get(h, "") for h in headers])
+        # 🔹 Righe documento (solo incluse)
+        cur.execute("""
+            SELECT descrizione_rigo, tratta, targhe, tipo_veicolo,
+                   quantita_fattura, quantita_reale, costo, include
+            FROM document_lines
+            WHERE document_id = ? AND include = 1
+            ORDER BY id
+        """, (doc_id,))
+        lines = [dict(row) for row in cur.fetchall()]
+        if not lines:
+            continue
 
-    # Auto-dimensionamento colonne
-    for i, col in enumerate(ws.columns, start=1):
-        max_len = max(len(str(cell.value)) if cell.value else 0 for cell in col)
-        ws.column_dimensions[get_column_letter(i)].width = min(max_len + 2, 40)
+        processed_rows = []
+        for r in lines:
+            targhe_raw = str(r.get("targhe") or "").strip()
+            targhe = [t.strip().upper() for t in re.split(r"[–,/\s]+", targhe_raw) if t.strip()]
+            num_targhe = len(targhe) if targhe else 1
 
-    # Salva file
-    wb.save(output_path)
+            costo_totale = float(r.get("costo") or 0)
+            costo_unitario = round(costo_totale / num_targhe, 2)
+
+            if not targhe:
+                # nessuna targa -> una riga generica
+                r["targhe"] = ""
+                r["costo"] = costo_unitario
+                r["quantita_reale"] = 1
+                r["num_mezzi"] = 1
+                processed_rows.append(r)
+            else:
+                for targa in targhe:
+                    r_copy = r.copy()
+                    r_copy["targhe"] = targa
+                    r_copy["costo"] = costo_unitario
+                    r_copy["quantita_reale"] = 1
+                    r_copy["num_mezzi"] = 1   # <--- sempre 1 per ogni riga
+                    processed_rows.append(r_copy)
+
+        # 🔹 Crea DataFrame formattato
+        df = pd.DataFrame(processed_rows)
+        if df.empty:
+            continue
+
+        df["Data Viaggio"] = doc.get("data_doc", "")
+        df.rename(columns={
+            "tratta": "Tratta",
+            "tipo_veicolo": "Tipologia di Veicolo (vedi foglio Nomenclatura veicoli imbarcati)",
+            "targhe": "Targa motrice",
+            "num_mezzi": "Num Mezzi",
+            "costo": "Costo imponibile quietanzato (pagato)"
+        }, inplace=True)
+
+        columns_order = [
+            "Data Viaggio", "Tratta",
+            "Tipologia di Veicolo (vedi foglio Nomenclatura veicoli imbarcati)",
+            "Targa motrice", "Num Mezzi", "Costo imponibile quietanzato (pagato)"
+        ]
+        df = df[[c for c in columns_order if c in df.columns]]
+
+        # 🔹 Scrivi nel foglio Excel
+        sheet_name = f"{doc.get('cliente', '')[:25]}_{doc_id}"
+        df.to_excel(wb_writer, index=False, sheet_name=sheet_name, startrow=6)
+
+        # 🔹 Intestazione cliente / fornitore
+        ws = wb_writer.sheets[sheet_name]
+        ws["E1"] = header_data["Soggetto Certificatore"]
+        ws["E2"] = header_data["Cliente"]
+        ws["E3"] = header_data["Partita IVA Cliente"]
+
+        ws["D1"].value = "Soggetto Certificatore"
+        ws["D2"].value = "Cliente"
+        ws["D3"].value = "Partita Iva Cliente"
+
+        bold = Font(bold=True, color="1F497D")
+        for r in range(1, 4):
+            ws[f"D{r}"].font = bold
+
+        # 🔹 Stile intestazione tabella
+        header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True)
+        center = Alignment(horizontal="center", vertical="center")
+
+        header_row = 7
+        for col in range(1, len(columns_order) + 1):
+            cell = ws.cell(row=header_row, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center
+
+        # 🔹 Larghezze colonne
+        widths = [15, 15, 40, 20, 10, 25]
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[chr(64 + i)].width = w
+
+        # 🔹 Bordo sottile
+        thin_border = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin")
+        )
+        for row in ws.iter_rows(min_row=header_row, max_row=ws.max_row, min_col=1, max_col=len(columns_order)):
+            for cell in row:
+                cell.border = thin_border
+                cell.alignment = Alignment(vertical="center")
+
+    wb_writer.close()
+    conn.close()
     return output_path
-
-
-def export_filtered_excel(filters: dict | None = None) -> Path:
-    """
-    Shortcut che combina query + generazione Excel in un unico passaggio.
-    """
-    records = query_records(filters)
-    return generate_excel(records)
-
-"""
-MagecoShipping - Modulo Excel Utility
-----------------------------------------
-
-Questo modulo gestisce la generazione dei file Excel contenenti i dati
-delle spedizioni registrate nel database di MagecoShipping.
-
-Strutturato per essere indipendente da Flask, può essere richiamato
-sia da interfaccia web che da script o test automatizzati.
-
-Funzioni principali:
---------------------
-
-1. query_records(filters: dict | None = None) -> list[dict]
-   Recupera i record dal database SQLite in base ai filtri specificati.
-   Attualmente restituisce tutti i documenti (funzione stub da espandere).
-   - Input: dizionario di filtri (es. {"cliente": "Tizio"})
-   - Output: lista di record (ciascuno rappresentato da un dizionario)
-
-2. generate_excel(records: list[dict], file_name: str | None = None) -> Path
-   Crea un file Excel (.xlsx) con i dati forniti.
-   - Usa openpyxl per generare il workbook.
-   - Aggiunge automaticamente intestazioni e righe dati.
-   - Ridimensiona le colonne in base al contenuto.
-   - Restituisce il percorso completo del file generato.
-
-3. export_filtered_excel(filters: dict | None = None) -> Path
-   Funzione di alto livello che combina query + generazione.
-   - Recupera i dati con query_records()
-   - Genera l’Excel con generate_excel()
-   - Restituisce il Path del file esportato.
-
-Cartella di output:
--------------------
-I file vengono salvati nella directory:
-    magecoshipping/exports/
-La cartella viene creata automaticamente se non esiste.
-
-Note progettuali:
------------------
-- Tutte le funzioni sono indipendenti dal contesto Flask.
-- I percorsi vengono risolti dinamicamente via pathlib per garantire
-  compatibilità tra sistemi operativi (Windows, macOS, Linux).
-- L’uso del timestamp nel nome file evita conflitti in caso di
-  esportazioni simultanee.
-
-"""
