@@ -46,15 +46,7 @@ jobs:
               git diff --name-status ${{ steps.base.outputs.base }} $GITHUB_SHA | \
                 awk 'BEGIN{print "<table><tr><th>Stato</th><th>File</th></tr>"} {printf("<tr><td>%s</td><td><code>%s</code></td></tr>\n",$1,$2)} END{print "</table>"}'
             fi
-            echo "<h2>Statistiche</h2><pre>"
-            if [ -f .diffignore ]; then
-              git diff --name-only ${{ steps.base.outputs.base }} $GITHUB_SHA | grep -Ev -f .diffignore | xargs -r git diff --shortstat
-            else
-              git diff --shortstat ${{ steps.base.outputs.base }} $GITHUB_SHA
-            fi
-            echo "</pre><h2>Ultimo commit</h2><pre>"
-            git --no-pager log -1 --pretty=fuller
-            echo "</pre></body></html>"
+          echo "</pre></body></html>"
           } > report/index.html
 
           # JSON per integrazioni future (rispetta .diffignore se presente)
@@ -100,3 +92,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+
