@@ -39,35 +39,64 @@ jobs:
             echo "<h1>MagecoShipping — Change Report</h1>"
             echo "<small>Branch: <code>${GITHUB_REF_NAME}</code> • Commit: <code>${GITHUB_SHA}</code> • Base: <code>${{ steps.base.outputs.base }}</code></small>"
             echo "<h2>File cambiati</h2>"
-            git diff --name-status ${{ steps.base.outputs.base }} $GITHUB_SHA | \
-              awk 'BEGIN{print "<table><tr><th>Stato</th><th>File</th></tr>"} {printf("<tr><td>%s</td><td><code>%s</code></td></tr>\n",$1,$2)} END{print "</table>"}'
+            if [ -f .diffignore ]; then
+              git diff --name-status ${{ steps.base.outputs.base }} $GITHUB_SHA | grep -Ev -f .diffignore | \
+                awk 'BEGIN{print "<table><tr><th>Stato</th><th>File</th></tr>"} {printf("<tr><td>%s</td><td><code>%s</code></td></tr>\n",$1,$2)} END{print "</table>"}'
+            else
+              git diff --name-status ${{ steps.base.outputs.base }} $GITHUB_SHA | \
+                awk 'BEGIN{print "<table><tr><th>Stato</th><th>File</th></tr>"} {printf("<tr><td>%s</td><td><code>%s</code></td></tr>\n",$1,$2)} END{print "</table>"}'
+            fi
             echo "<h2>Statistiche</h2><pre>"
-            git diff --shortstat ${{ steps.base.outputs.base }} $GITHUB_SHA
+            if [ -f .diffignore ]; then
+              git diff --name-only ${{ steps.base.outputs.base }} $GITHUB_SHA | grep -Ev -f .diffignore | xargs -r git diff --shortstat
+            else
+              git diff --shortstat ${{ steps.base.outputs.base }} $GITHUB_SHA
+            fi
             echo "</pre><h2>Ultimo commit</h2><pre>"
             git --no-pager log -1 --pretty=fuller
             echo "</pre></body></html>"
           } > report/index.html
 
-          # JSON per integrazioni future
-          git diff --name-status ${{ steps.base.outputs.base }} $GITHUB_SHA | \
-            awk 'BEGIN{print "["} {printf("%s{\"status\":\"%s\",\"path\":\"%s\"}", (NR>1?",":""), $1, $2)} END{print "]"}' \
-            > report/changes.json
+          # JSON per integrazioni future (rispetta .diffignore se presente)
+          if [ -f .diffignore ]; then
+            git diff --name-status ${{ steps.base.outputs.base }} $GITHUB_SHA | grep -Ev -f .diffignore | \
+              awk 'BEGIN{print "["} {printf("%s{\"status\":\"%s\",\"path\":\"%s\"}", (NR>1?",":""), $1, $2)} END{print "]"}' \
+              > report/changes.json
+          else
+            git diff --name-status ${{ steps.base.outputs.base }} $GITHUB_SHA | \
+              awk 'BEGIN{print "["} {printf("%s{\"status\":\"%s\",\"path\":\"%s\"}", (NR>1?",":""), $1, $2)} END{print "]"}' \
+              > report/changes.json
+          fi
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload report as artifact (per tutte le branch)
+        uses: actions/upload-artifact@v4
         with:
+          name: change-report-${{ github.ref_name }}
           path: report
 
   deploy:
+    # deploya solo dalla branch main
+    if: github.ref_name == 'main'
     needs: build-report
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Download built report
+        uses: actions/download-artifact@v4
+        with:
+          name: change-report-main
+          path: report
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact for Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: report
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
