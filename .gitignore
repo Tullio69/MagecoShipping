@@ -24,3 +24,5 @@ __pycache__/
 .vscode/
 magecoshipping/exports/
 magecoshipping/.DS_Store
+.DS_Store
+moved_files/
