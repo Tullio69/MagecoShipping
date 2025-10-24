@@ -1,0 +1,31 @@
+veicolo_map:
+  AUTOVETTURE:
+    - AUTO
+    - AUTOVETTURA
+    - AUTOVETTURE
+    - CAR
+  AUTOCARRO:
+    - AUTOCARRO
+    - FURGONE
+    - FURGONATO
+    - VEICOLO COMMERCIALE
+  AUTOARTICOLATO:
+    - BILICO
+    - AUTOARTICOLATO
+    - AUTOART.
+    - TRATTORE
+    - SEMIRIMORCHIO
+    - RIMORCHIO
+  MOTOVEICOLO:
+    - MOTO
+    - MOTOCICLO
+    - SCOOTER
+  CASSA MOBILE:
+    - CASSA MOBILE
+    - CASSA
+    - UDC
+    - U.D.C.
+ignore_words:
+  - TIRRENIA
+  - GRIMALDI
+  - GNV

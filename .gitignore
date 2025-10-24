@@ -17,3 +17,10 @@ __pycache__/
 *.bak
 /dist/
 /processed/
+
+# Ignore SQLite databases
+*.sqlite3
+*.db
+.vscode/
+magecoshipping/exports/
+magecoshipping/.DS_Store

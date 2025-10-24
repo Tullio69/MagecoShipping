@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
   <meta charset="utf-8">
   <title>Archivio Documenti – MagecoShipping</title>
@@ -9,16 +10,27 @@
       background: #f4f6f8;
       margin: 2rem;
     }
+
     .container {
       max-width: 1200px;
       margin: 0 auto;
       background: #fff;
       padding: 1rem 1.5rem;
       border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
     }
-    h2 { color: #333; margin-top: 0; }
-    form { margin-bottom: 1rem; display: flex; gap: .5rem; }
+
+    h2 {
+      color: #333;
+      margin-top: 0;
+    }
+
+    form {
+      margin-bottom: 1rem;
+      display: flex;
+      gap: .5rem;
+    }
+
     input[type=text] {
       flex: 1;
       padding: .5rem .8rem;
@@ -26,7 +38,9 @@
       border-radius: 4px;
       font-size: 1rem;
     }
-    button, a.button {
+
+    button,
+    a.button {
       padding: .5rem 1rem;
       background: #0078d7;
       color: white;
@@ -35,31 +49,68 @@
       cursor: pointer;
       text-decoration: none;
     }
+
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 1rem;
     }
-    th, td {
+
+    th,
+    td {
       padding: .5rem .6rem;
       border-bottom: 1px solid #eee;
       font-size: .85rem;
     }
-    th { background: #f2f2f2; text-align: left; }
-    tr:hover { background: #f9f9f9; }
-    .right { text-align: right; }
-    .center { text-align: center; }
-    .status-pending { color: #f0ad4e; }
-    .status-validated { color: #5cb85c; }
+
+    th {
+      background: #f2f2f2;
+      text-align: left;
+    }
+
+    tr:hover {
+      background: #f9f9f9;
+    }
+
+    .right {
+      text-align: right;
+    }
+
+    .center {
+      text-align: center;
+    }
+
+    .status-pending {
+      color: #f0ad4e;
+    }
+
+    .status-validated {
+      color: #5cb85c;
+    }
+
     .actions a {
       text-decoration: none;
       color: #0078d7;
       font-weight: bold;
     }
+
+    .btn-export {
+    background-color: #10b981;
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    transition: background-color 0.2s;
+}
+.btn-export:hover {
+    background-color: #059669;
+}
   </style>
 </head>
+
 <body>
-  <div class="container">
+  
     <h2>📊 Archivio Documenti</h2>
 
     <form method="get">
@@ -67,6 +118,8 @@
       <button type="submit">🔍 Cerca</button>
       <a href="/dbview" class="button" style="background:#999;">🔄 Reset</a>
       <a href="/dbview/new" class="button" style="background:#28a745;">➕ Nuovo Documento</a>
+      <a href="/export" class="btn-export">📤 Esporta in Excel</a>
+  </div>
     </form>
 
     <table>
@@ -101,10 +154,13 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="10" class="center">Nessun documento trovato.</td></tr>
+        <tr>
+          <td colspan="10" class="center">Nessun documento trovato.</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </body>
+
 </html>

@@ -1,5 +1,6 @@
 import ctypes
 import os
+import platform
 import subprocess
 from pathlib import Path
 
@@ -14,6 +15,9 @@ IDOK = 1
 IDCANCEL = 2
 
 def show_modal(title: str, message: str, open_path: str | None = None):
+    if platform.system() == "Darwin":  # macOS
+        print(f"[Modal Stub] {title}: {message}")
+        return
     """
     Mostra una finestra modale personalizzata usando Win32 MessageBox:
     - Titolo e messaggio personalizzabili

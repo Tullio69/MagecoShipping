@@ -1,12 +1,17 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, flash, send_file
 from threading import Thread
 import webbrowser
 from pathlib import Path
 from magecoshipping.utils.db_utils import insert_document, insert_or_get_supplier
 from magecoshipping.utils.fs_ops import move_with_retry
+from magecoshipping.utils import excel 
+import re
+import secrets
+
 
 
 app = Flask(__name__)
+app.secret_key = secrets.token_hex(16)
 
 @app.route("/review", methods=["GET", "POST"])
 def review():
@@ -94,7 +99,7 @@ def validate_text():
     targa = bool(re.search(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper()))
     tipo = any(k in descr.lower() for k in ["autovettur", "autocarro", "furgon", "bus", "pullman", "moto"])
     recognized = tratta or targa or tipo
-    return jsonify({"recognized": recognized})
+    return flask.jsonify({"recognized": recognized})
 
 from magecoshipping.utils.db_utils import get_documents
 
@@ -110,6 +115,78 @@ def dbview():
         return f"<h3>Errore durante il caricamento dei dati: {e}</h3>"
 
     return render_template("dbview.html", docs=documents, query=query)
+
+
+
+from flask import render_template, request, flash, redirect, url_for
+import platform, subprocess, os
+from magecoshipping.utils.db_utils import get_documents
+from magecoshipping.utils import excel
+
+@app.route("/export", methods=["GET", "POST"])
+def export_page():
+    query = request.args.get("q", "")
+    anno = request.args.get("anno", "")
+    cliente = request.args.get("cliente", "")
+    status = request.args.get("status", "validated")
+
+    try:
+        documents = get_documents(query, status_filter=status)
+        if anno:
+            documents = [d for d in documents if d.get("data_doc", "").startswith(anno)]
+        if cliente:
+            documents = [d for d in documents if cliente.lower() in (d.get("cliente") or "").lower()]
+    except Exception as e:
+        flash(f"❌ Errore caricamento documenti: {e}", "error")
+        documents = []
+
+    anni = sorted({str(d["data_doc"])[:4] for d in documents if d.get("data_doc")})
+    clienti = sorted({d["cliente"] for d in documents if d.get("cliente")})
+
+    if request.method == "POST":
+        selected_ids = request.form.getlist("selected_ids")
+        if not selected_ids:
+            flash("⚠️ Nessun documento selezionato per l’esportazione.", "error")
+            return redirect(url_for("export_page"))
+
+        try:
+            filters = {"ids": [int(i) for i in selected_ids]}
+            excel_path = excel.export_filtered_excel(filters)
+            flash(f"✅ File generato: {excel_path.name}", "success")
+            return redirect(url_for("export_page"))
+        except Exception as e:
+            flash(f"❌ Errore durante l’esportazione: {e}", "error")
+            return redirect(url_for("export_page"))
+
+    return render_template("export.html", docs=documents, query=query,
+                           anno=anno, anni=anni,
+                           cliente=cliente, clienti=clienti, status=status)
+
+
+
+@app.route("/open_export_folder", methods=["POST"])
+def open_export_folder():
+    """
+    Apre la cartella degli export nel file explorer del sistema operativo.
+    Funziona su Windows, macOS e Linux.
+    """
+    exports_dir = Path(__file__).resolve().parents[1] / "exports"
+
+    try:
+        # Crea la cartella se non esiste
+        exports_dir.mkdir(exist_ok=True)
+
+        system = platform.system()
+        if system == "Windows":
+            os.startfile(exports_dir)
+        elif system == "Darwin":  # macOS
+            subprocess.Popen(["open", exports_dir])
+        else:  # Linux
+            subprocess.Popen(["xdg-open", exports_dir])
+
+        return flask.jsonify({"success": True, "message": f"Aperta cartella: {exports_dir}"}), 200
+    except Exception as e:
+        return flask.jsonify({"success": False, "message": str(e)}), 500
 
 
 def _run_server():

@@ -17,8 +17,8 @@ def init_db():
         c.execute("""
         CREATE TABLE IF NOT EXISTS suppliers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fornitore TEXT,
-            piva_fornitore TEXT,
+            fornitore TEXT NOT NULL,
+            piva_fornitore TEXT DEFAULT 'N/D',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
@@ -27,16 +27,17 @@ def init_db():
         c.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_name TEXT,
-            cliente TEXT,
-            piva_cliente TEXT,
-            fornitore TEXT,
-            piva_fornitore TEXT,
+            file_name TEXT NOT NULL,
+            cliente TEXT NOT NULL,
+            piva_cliente TEXT DEFAULT 'N/D',
+            fornitore TEXT NOT NULL,
+            piva_fornitore TEXT DEFAULT 'N/D',
             num_doc TEXT,
             data_doc TEXT,
             totale_doc REAL,
-            status TEXT,
+            status TEXT DEFAULT 'pending' NOT NULL,
             supplier_id INTEGER,
+            original_path TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(supplier_id) REFERENCES suppliers(id)
         )
@@ -46,7 +47,7 @@ def init_db():
         c.execute("""
         CREATE TABLE IF NOT EXISTS document_lines (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            document_id INTEGER,
+            document_id INTEGER NOT NULL,
             descrizione_rigo TEXT,
             tratta TEXT,
             targhe TEXT,
