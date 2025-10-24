@@ -125,51 +125,42 @@ from magecoshipping.utils import excel
 
 @app.route("/export", methods=["GET", "POST"])
 def export_page():
-    """
-    Pagina di esportazione in Excel dei documenti con status 'validated'.
-    Permette filtro per cliente/fornitore e selezione multipla.
-    """
     query = request.args.get("q", "")
-    status = request.args.get("status", "validated")  # default: solo validati
+    anno = request.args.get("anno", "")
+    cliente = request.args.get("cliente", "")
+    status = request.args.get("status", "validated")
 
-    # 🔹 Ottieni documenti filtrati (es. solo validati)
     try:
         documents = get_documents(query, status_filter=status)
+        if anno:
+            documents = [d for d in documents if d.get("data_doc", "").startswith(anno)]
+        if cliente:
+            documents = [d for d in documents if cliente.lower() in (d.get("cliente") or "").lower()]
     except Exception as e:
         flash(f"❌ Errore caricamento documenti: {e}", "error")
         documents = []
 
+    anni = sorted({str(d["data_doc"])[:4] for d in documents if d.get("data_doc")})
+    clienti = sorted({d["cliente"] for d in documents if d.get("cliente")})
+
     if request.method == "POST":
         selected_ids = request.form.getlist("selected_ids")
-
         if not selected_ids:
             flash("⚠️ Nessun documento selezionato per l’esportazione.", "error")
             return redirect(url_for("export_page"))
 
         try:
-            # Prepara i filtri per la funzione Excel
             filters = {"ids": [int(i) for i in selected_ids]}
             excel_path = excel.export_filtered_excel(filters)
-
-            flash(f"✅ File generato correttamente: {excel_path.name}", "success")
-
-            # Apri la cartella export
-            exports_dir = excel_path.parent
-            system = platform.system()
-            if system == "Darwin":
-                subprocess.Popen(["open", exports_dir])
-            elif system == "Windows":
-                os.startfile(str(exports_dir))
-            else:
-                subprocess.Popen(["xdg-open", exports_dir])
-
+            flash(f"✅ File generato: {excel_path.name}", "success")
             return redirect(url_for("export_page"))
-
         except Exception as e:
             flash(f"❌ Errore durante l’esportazione: {e}", "error")
             return redirect(url_for("export_page"))
 
-    return render_template("export.html", docs=documents, query=query, status=status)
+    return render_template("export.html", docs=documents, query=query,
+                           anno=anno, anni=anni,
+                           cliente=cliente, clienti=clienti, status=status)
 
 
 

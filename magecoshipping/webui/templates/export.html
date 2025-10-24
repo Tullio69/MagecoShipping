@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <title>Esportazione Documenti - MagecoShipping</title>
@@ -100,21 +101,42 @@
             padding: 10px;
             border-radius: 6px;
         }
-        .msg.success { background: #d1f2d1; color: #165b16; }
-        .msg.error { background: #fbdcdc; color: #812727; }
+
+        .msg.success {
+            background: #d1f2d1;
+            color: #165b16;
+        }
+
+        .msg.error {
+            background: #fbdcdc;
+            color: #812727;
+        }
+
+        .row-status-validated {
+            background: #e6ffee;
+        }
+
+        .row-status-pending {
+            background: #fff8e6;
+        }
+
+        .row-status-rejected {
+            background: #ffe6e6;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>📦 Esportazione Documenti</h1>
         <p>Filtra i documenti per <b>anno</b> e <b>cliente</b>, poi seleziona quelli da esportare.</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="msg {{ category }}">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="msg {{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
 
         <form method="get" action="/export">
@@ -123,20 +145,22 @@
                 <select name="anno">
                     <option value="">Anno...</option>
                     {% for year in anni %}
-                        <option value="{{ year }}" {% if year|string == anno|string %}selected{% endif %}>{{ year }}</option>
+                    <option value="{{ year }}" {% if year|string==anno|string %}selected{% endif %}>{{ year }}</option>
                     {% endfor %}
                 </select>
                 <select name="cliente">
                     <option value="">Cliente...</option>
                     {% for c in clienti %}
-                        <option value="{{ c }}" {% if c == cliente %}selected{% endif %}>{{ c }}</option>
+                    <option value="{{ c }}" {% if c==cliente %}selected{% endif %}>{{ c }}</option>
                     {% endfor %}
                 </select>
                 <button type="submit">🔍 Filtra</button>
             </div>
         </form>
 
-        <form method="post">
+        <p><b>{{ docs|length }}</b> document{{ 'i' if docs|length != 1 else 'o' }} trovati</p>
+
+        <form method="post" id="exportForm">
             <table class="doc-table">
                 <thead>
                     <tr>
@@ -151,36 +175,54 @@
                 </thead>
                 <tbody>
                     {% if docs %}
-                        {% for doc in docs %}
-                        <tr>
-                            <td><input type="checkbox" name="selected_ids" value="{{ doc.id }}"></td>
-                            <td>{{ doc.cliente }}</td>
-                            <td>{{ doc.fornitore }}</td>
-                            <td>{{ doc.num_doc }}</td>
-                            <td>{{ doc.data_doc }}</td>
-                            <td>{{ "%.2f"|format(doc.totale_doc or 0) }} €</td>
-                            <td>{{ doc.status }}</td>
-                        </tr>
-                        {% endfor %}
+                    {% for doc in docs %}
+                    <tr class="row-status-{{ doc.status }}">
+                        <td><input type="checkbox" name="selected_ids" value="{{ doc.id }}"
+                                onchange="toggleExportBtn()"></td>
+                        <td>{{ doc.cliente }}</td>
+                        <td>{{ doc.fornitore }}</td>
+                        <td>{{ doc.num_doc }}</td>
+                        <td>{{ doc.data_doc }}</td>
+                        <td>{{ "%.2f"|format(doc.totale_doc or 0) }} €</td>
+                        <td>{{ doc.status }}</td>
+                    </tr>
+                    {% endfor %}
                     {% else %}
-                        <tr><td colspan="7">Nessun documento trovato.</td></tr>
+                    <tr>
+                        <td colspan="7">Nessun documento trovato.</td>
+                    </tr>
                     {% endif %}
                 </tbody>
             </table>
 
             <div class="actions">
-                <button type="submit" class="export-btn">📊 Esporta selezionati</button>
-                <button type="button" class="open-folder-btn" onclick="openExportFolder()">📁 Apri cartella export</button>
+                <button type="submit" class="export-btn" id="exportBtn" disabled>📊 Esporta selezionati</button>
+                <button type="button" class="open-folder-btn" onclick="openExportFolder()">📁 Apri cartella
+                    export</button>
             </div>
         </form>
     </div>
 
     <script>
+        const exportBtn = document.getElementById("exportBtn");
+        const form = document.getElementById("exportForm");
+
+        function toggleExportBtn() {
+            const checkboxes = document.querySelectorAll('input[name="selected_ids"]:checked');
+            exportBtn.disabled = checkboxes.length === 0;
+        }
+
+        form.addEventListener("submit", () => {
+            exportBtn.textContent = "⏳ Esportazione in corso...";
+            exportBtn.disabled = true;
+        });
+
         async function openExportFolder() {
-            const res = await fetch('/open_export_folder', {method: 'POST'});
+            const res = await fetch('/open_export_folder', { method: 'POST' });
             const data = await res.json();
             alert(data.message);
         }
     </script>
 </body>
+
 </html>
