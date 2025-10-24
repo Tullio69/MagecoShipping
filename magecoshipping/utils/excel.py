@@ -43,9 +43,9 @@ def export_filtered_excel(filters=None) -> Path:
     # 🔹 Recupera i documenti da esportare
     if filters and "ids" in filters:
         placeholders = ",".join("?" for _ in filters["ids"])
-        cur.execute(f"SELECT * FROM documents WHERE id IN ({placeholders})", filters["ids"])
+        cur.execute(f"SELECT * FROM documents WHERE id IN ({placeholders}) ORDER BY created_at DESC", filters["ids"])
     else:
-        cur.execute("SELECT * FROM documents ORDER BY date_added DESC")
+        cur.execute("SELECT * FROM documents ORDER BY created_at DESC")
 
     documents = [dict(row) for row in cur.fetchall()]
     wb_writer = pd.ExcelWriter(output_path, engine="openpyxl")
