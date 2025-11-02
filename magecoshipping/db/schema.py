@@ -13,6 +13,17 @@ def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
 
+        # Tabella batch di acquisizione
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_name TEXT NOT NULL,
+            num_documents INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending' NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+
         # Tabella fornitori
         c.execute("""
         CREATE TABLE IF NOT EXISTS suppliers (
@@ -37,9 +48,11 @@ def init_db():
             totale_doc REAL,
             status TEXT DEFAULT 'pending' NOT NULL,
             supplier_id INTEGER,
+            batch_id INTEGER,
             original_path TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(supplier_id) REFERENCES suppliers(id)
+            FOREIGN KEY(supplier_id) REFERENCES suppliers(id),
+            FOREIGN KEY(batch_id) REFERENCES batches(id)
         )
         """)
 

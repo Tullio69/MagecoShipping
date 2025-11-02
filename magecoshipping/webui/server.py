@@ -87,8 +87,150 @@ def review():
     return render_template("confirm.html", data=data, lines=lines)
 
 
-@app.route("/validate_text", methods=["POST"])
+@app.route("/batch-review", methods=["GET", "POST"])
+def batch_review():
+    """
+    Gestisce la review di un batch di documenti multipli.
+    Permette navigazione tra documenti e conferma/correzione/rifiuto di ciascuno.
+    """
+    from magecoshipping.utils.db_utils import create_batch, insert_document, insert_or_get_supplier
+    from datetime import datetime
 
+    batch_documents = app.config.get("batch_documents", [])
+    batch_failed_files = app.config.get("batch_failed_files", [])
+
+    if not batch_documents:
+        return render_template("result.html", message="⚠️ Nessun documento nel batch.")
+
+    current_index = app.config.get("batch_current_index", 0)
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "navigate":
+            # Navigazione tra documenti
+            direction = request.form.get("direction")
+            if direction == "next" and current_index < len(batch_documents) - 1:
+                current_index += 1
+            elif direction == "prev" and current_index > 0:
+                current_index -= 1
+            app.config["batch_current_index"] = current_index
+
+        elif action in ("confirm", "correct", "reject"):
+            # Aggiorna il documento corrente con i dati dal form
+            current_doc = batch_documents[current_index]
+
+            # Aggiorna righe dal form
+            updated_lines = []
+            i = 0
+            while True:
+                prefix = f"line_{i}_"
+                if f"{prefix}descrizione_rigo" not in request.form:
+                    break
+                updated_lines.append({
+                    "descrizione_rigo": request.form.get(f"{prefix}descrizione_rigo", ""),
+                    "tratta": request.form.get(f"{prefix}tratta", ""),
+                    "targhe": request.form.get(f"{prefix}targhe", ""),
+                    "tipo_veicolo": request.form.get(f"{prefix}tipo_veicolo", ""),
+                    "quantita_fattura": float(request.form.get(f"{prefix}quantita_fattura", 1)),
+                    "quantita_reale": float(request.form.get(f"{prefix}quantita_reale", 1)),
+                    "costo": float(request.form.get(f"{prefix}costo", 0)),
+                    "recognized": request.form.get(f"{prefix}recognized") == "True",
+                    "include": f"{prefix}include" in request.form
+                })
+                i += 1
+
+            current_doc["lines"] = updated_lines
+
+            # Marca il documento come processato
+            current_doc["_processed"] = True
+            current_doc["_action"] = action
+
+            # Se è l'ultimo documento o l'utente ha cliccato "Conferma batch"
+            if action == "confirm_batch" or all(doc.get("_processed") for doc in batch_documents):
+                # Crea il batch nel database
+                batch_name = f"Batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                batch_id = create_batch(batch_name, len(batch_documents))
+
+                # Processa tutti i documenti
+                processed_dir = Path(__file__).resolve().parents[2] / "processed"
+                errors_dir = Path(__file__).resolve().parents[2] / "errors"
+
+                messages = []
+                for doc in batch_documents:
+                    doc_action = doc.get("_action", "confirm")
+                    original_path = Path(doc.get("original_path"))
+
+                    if doc_action in ("confirm", "correct"):
+                        try:
+                            supplier_id = insert_or_get_supplier(
+                                fornitore=doc.get("fornitore"),
+                                piva_fornitore=doc.get("piva_fornitore")
+                            )
+                            doc["supplier_id"] = supplier_id
+                            doc["status"] = "validated"
+
+                            # Inserisci documento con batch_id
+                            insert_document(doc, batch_id=batch_id)
+                            move_with_retry(original_path, processed_dir)
+                            messages.append(f"✅ {doc['file_name']}: Validato")
+                        except Exception as e:
+                            messages.append(f"❌ {doc['file_name']}: Errore - {e}")
+
+                    elif doc_action == "reject":
+                        try:
+                            move_with_retry(original_path, errors_dir)
+                            messages.append(f"🚫 {doc['file_name']}: Rifiutato")
+                        except Exception as e:
+                            messages.append(f"❌ {doc['file_name']}: Errore - {e}")
+
+                # Mostra risultato finale
+                result_msg = f"<h3>📦 Batch '{batch_name}' completato</h3><ul>"
+                for msg in messages:
+                    result_msg += f"<li>{msg}</li>"
+                result_msg += "</ul>"
+
+                if batch_failed_files:
+                    result_msg += "<h4>⚠️ File con errori:</h4><ul>"
+                    for file_path, error in batch_failed_files:
+                        result_msg += f"<li>{Path(file_path).name}: {error}</li>"
+                    result_msg += "</ul>"
+
+                # Pulisci la configurazione del batch
+                app.config.pop("batch_documents", None)
+                app.config.pop("batch_failed_files", None)
+                app.config.pop("batch_current_index", None)
+
+                return render_template("result.html", message=result_msg)
+
+            # Naviga al prossimo documento non processato
+            next_index = current_index
+            for i in range(current_index + 1, len(batch_documents)):
+                if not batch_documents[i].get("_processed"):
+                    next_index = i
+                    break
+            else:
+                # Se tutti i documenti successivi sono processati, cerca indietro
+                for i in range(current_index):
+                    if not batch_documents[i].get("_processed"):
+                        next_index = i
+                        break
+
+            current_index = next_index
+            app.config["batch_current_index"] = current_index
+
+    # Prepara i dati per il template
+    current_doc = batch_documents[current_index]
+    return render_template("batch_review.html",
+                          data=current_doc,
+                          lines=current_doc.get("lines", []),
+                          current_index=current_index,
+                          total_documents=len(batch_documents),
+                          failed_files=batch_failed_files,
+                          batch_documents=batch_documents)
+
+
+@app.route("/validate_text", methods=["POST"])
 def validate_text():
     """
     API AJAX per controllare se la descrizione rispetta le convenzioni MagecoShipping.
@@ -99,7 +241,7 @@ def validate_text():
     targa = bool(re.search(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper()))
     tipo = any(k in descr.lower() for k in ["autovettur", "autocarro", "furgon", "bus", "pullman", "moto"])
     recognized = tratta or targa or tipo
-    return flask.jsonify({"recognized": recognized})
+    return jsonify({"recognized": recognized})
 
 from magecoshipping.utils.db_utils import get_documents
 
@@ -217,6 +359,30 @@ def start_review_server(data_dict=None, open_page="review"):
 
     import webbrowser
     webbrowser.open(f"http://localhost:5001/{open_page}")
+
+
+def start_batch_review_server(parsed_documents, failed_files=None):
+    """
+    Avvia il server Flask per la batch review di più documenti.
+
+    Args:
+        parsed_documents: Lista di dizionari contenenti i dati parsati di ogni documento
+        failed_files: Lista opzionale di tuple (path, error) per file che non sono stati parsati correttamente
+    """
+    app.config["batch_documents"] = parsed_documents
+    app.config["batch_failed_files"] = failed_files or []
+    app.config["batch_current_index"] = 0
+
+    from threading import Thread
+    thread = Thread(target=_run_server, daemon=True)
+    thread.start()
+
+    # Attende mezzo secondo per consentire l'avvio del server
+    import time
+    time.sleep(0.5)
+
+    import webbrowser
+    webbrowser.open(f"http://localhost:5001/batch-review")
 
 
 from magecoshipping.utils.db_utils import get_documents
