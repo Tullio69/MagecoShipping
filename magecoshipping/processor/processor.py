@@ -71,7 +71,7 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
 
             tipo_veicolo = "N/D"
             for key, tipo in {
-                "autovettur": "AUTOVETTURA",
+                "autovettura": "AUTOVETTURA",
                 "autocarro": "AUTOCARRO",
                 "furgon": "FURGONE",
                 "bus": "BUS",
@@ -98,7 +98,7 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
             # --- Identificazione tipo veicolo ---
             tipo_veicolo = "N/D"
             for key, tipo in {
-                "autovettur": "AUTOVETTURA",
+                "autovettura": "AUTOVETTURA",
                 "autocarro": "AUTOCARRO",
                 "furgon": "FURGONE",
                 "bus": "BUS",
