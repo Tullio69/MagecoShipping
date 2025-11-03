@@ -1,6 +1,8 @@
 import xml.etree.ElementTree as ET
 import re
-
+# --- LOG DIAGNOSTICO (puoi rimuoverlo dopo i test) ---
+import logging
+logger = logging.getLogger(__name__)
 CATEGORY_MAP = {
     "AUTO": "AUTOVETTURA",
     "AUTOV": "AUTOVETTURA",
@@ -133,23 +135,126 @@ def extract_line_data(line):
 # PARSING DELLA DESCRIZIONE (TESTO LIBERO)
 # ============================================================
 
+# --- sostituisci TUTTA la sezione "PARSING DELLA DESCRIZIONE" ---
+
+IGNORE_WORDS = {"TIRRENIA", "GRIMALDI", "GNV"}
+PLATE_REGEX = r"\b[A-Z]{2}\d{3}[A-Z]{2}\b"      # AA123BB
+TRATTA_REGEX = r"\b[A-Z]{1,3}/[A-Z]{1,3}\b"     # NA/PA
+
+VEHICLE_PRIORITY = [
+    "CASSA MOBILE",
+    "AUTOARTICOLATO", "BILICO", "AUTOTRENO", "SEMIRIMORCHIO", "RIMORCHIO",
+    "AUTOCARRO", "FURGONE", "CAMION",
+    "MOTOVEICOLO",
+    "AUTOVETTURE"
+]
+
+VEHICLE_SYNONYMS = {
+    "CASSA MOBILE": ["CASSA MOBILE", "CASSA", "UDC", "U.D.C."],
+    "AUTOARTICOLATO": ["AUTOARTICOLATO", "AUTOART.", "ART", "TIR"],
+    "BILICO": ["BILICO", "BIL"],
+    "AUTOTRENO": ["AUTOTRENO", "ATR"],
+    "SEMIRIMORCHIO": ["SEMIRIMORCHIO", "SEM"],
+    "RIMORCHIO": ["RIMORCHIO", "RIM"],
+    "AUTOCARRO": ["AUTOCARRO", "AC", "CAMION", "CAM"],
+    "FURGONE": ["FURGONE", "FURGONATO", "FUR"],
+    "MOTOVEICOLO": ["MOTO", "MOTOCICLO", "SCOOTER"],
+    "AUTOVETTURE": ["AUTO", "AUTOVETTURA", "AUTOV"]
+}
+
+def _normalize_text(s: str) -> str:
+    s = (s or "").upper()
+    s = re.sub(r"[\/\|\-,\s]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def _match_vehicle_type(text: str) -> str | None:
+    t = _normalize_text(text)
+    for w in IGNORE_WORDS:
+        t = re.sub(rf"\b{re.escape(w)}\b", " ", t)
+    for category in VEHICLE_PRIORITY:
+        for syn in VEHICLE_SYNONYMS.get(category, []):
+            if re.search(rf"\b{re.escape(syn)}\b", t):
+                # appiattimenti verso categorie canoniche
+                if category in {"BILICO", "AUTOTRENO", "SEMIRIMORCHIO", "RIMORCHIO"}:
+                    return "AUTOARTICOLATO"
+                if category == "FURGONE":
+                    return "AUTOCARRO"
+                return category
+    return None
+
+# ============================================================
+# PARSING DELLA DESCRIZIONE (TESTO LIBERO)
+# ============================================================
+
+IGNORE_WORDS = {"TIRRENIA", "GRIMALDI", "GNV"}   # non devono attivare match (es. TIR in TIRRENIA)
+PLATE_REGEX  = r"\b[A-Z]{2}\d{3}[A-Z]{2}\b"      # AA123BB
+TRATTA_REGEX = r"\b[A-Z]{1,3}/[A-Z]{1,3}\b"      # NA/PA
+
+# Priorità: specifici prima, generici dopo
+VEHICLE_PRIORITY = [
+    "CASSA MOBILE",
+    "AUTOARTICOLATO", "BILICO", "AUTOTRENO", "SEMIRIMORCHIO", "RIMORCHIO",
+    "AUTOCARRO", "FURGONE", "CAMION",
+    "MOTOVEICOLO",
+    "AUTOVETTURE",  # generica, per ultima
+]
+
+VEHICLE_SYNONYMS = {
+    "CASSA MOBILE":    ["CASSA MOBILE", "CASSA", "UDC", "U.D.C."],
+    "AUTOARTICOLATO":  ["AUTOARTICOLATO", "AUTOART.", "ART", "TIR"],
+    "BILICO":          ["BILICO", "BIL"],
+    "AUTOTRENO":       ["AUTOTRENO", "ATR"],
+    "SEMIRIMORCHIO":   ["SEMIRIMORCHIO", "SEM"],
+    "RIMORCHIO":       ["RIMORCHIO", "RIM"],
+    "AUTOCARRO":       ["AUTOCARRO", "AC", "CAMION", "CAM"],
+    "FURGONE":         ["FURGONE", "FURGONATO", "FUR"],
+    "MOTOVEICOLO":     ["MOTO", "MOTOCICLO", "SCOOTER"],
+    "AUTOVETTURE":     ["AUTO", "AUTOVETTURA", "AUTOV"],
+}
+
+def _normalize_text(s: str) -> str:
+    s = (s or "").upper()
+    s = re.sub(r"[\/\|\-,\s]+", " ", s)     # normalizza separatori DOPO aver estratto NA/PA e targhe
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def _match_vehicle_type(text: str) -> str | None:
+    t = _normalize_text(text)
+    # rimuovi parole da ignorare (evita "TIR" dentro "TIRRENIA")
+    for w in IGNORE_WORDS:
+        t = re.sub(rf"\b{re.escape(w)}\b", " ", t)
+    # scan per priorità e parole intere
+    for category in VEHICLE_PRIORITY:
+        for syn in VEHICLE_SYNONYMS.get(category, []):
+            if re.search(rf"\b{re.escape(syn)}\b", t):
+                # appiattimenti verso categorie canoniche
+                if category in {"BILICO", "AUTOTRENO", "SEMIRIMORCHIO", "RIMORCHIO"}:
+                    return "AUTOARTICOLATO"
+                if category == "FURGONE":
+                    return "AUTOCARRO"
+                return category
+    return None
+
 def parse_description(text: str) -> dict:
     """
-    Interpreta la descrizione di un rigo fattura.
+    1) Estrae TRATTA e TARGHE dal testo grezzo (mantiene lo slash).
+    2) Riconosce TIPO VEICOLO su testo normalizzato con priorità e confini di parola.
     """
-    text = text.upper()
-    result = {"veicolo_tipo": None, "tratta": None, "targhe": []}
+    raw = (text or "").upper()
 
-    for abbr, full in CATEGORY_MAP.items():
-        if abbr in text:
-            result["veicolo_tipo"] = full
-            break
+    # 1) TRATTA e TARGHE prima della normalizzazione
+    m_tratta = re.search(TRATTA_REGEX, raw)
+    tratta = m_tratta.group(0) if m_tratta else None
+    targhe = re.findall(PLATE_REGEX, raw)
 
-    tratta = re.search(r"[A-Z]{2}/[A-Z]{2}", text)
-    if tratta:
-        result["tratta"] = tratta.group(0)
+    # 2) Tipo veicolo (parole intere + priorità)
+    tipo_veicolo = _match_vehicle_type(raw) or "N/D"
+    logger.info("parse_description -> tipo=%s tratta=%s targhe=%s", tipo_veicolo, tratta, ";".join(targhe))
+    print("[parse_description]", {"tipo": tipo_veicolo, "tratta": tratta, "targhe": targhe})
+    return {
+        "tipo_veicolo": tipo_veicolo,   # <-- allineato al DB
+        "tratta": tratta,
+        "targhe": targhe,
+    }
 
-    targhe = re.findall(r"[A-Z]{1,2}\\d{3,4}[A-Z]{1,2}", text)
-    result["targhe"] = targhe
-
-    return result

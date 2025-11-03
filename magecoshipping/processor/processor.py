@@ -71,7 +71,7 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
 
             tipo_veicolo = "N/D"
             for key, tipo in {
-                "autovettur": "AUTOVETTURA",
+                "autovettura": "AUTOVETTURA",
                 "autocarro": "AUTOCARRO",
                 "furgon": "FURGONE",
                 "bus": "BUS",
@@ -98,7 +98,7 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
             # --- Identificazione tipo veicolo ---
             tipo_veicolo = "N/D"
             for key, tipo in {
-                "autovettur": "AUTOVETTURA",
+                "autovettura": "AUTOVETTURA",
                 "autocarro": "AUTOCARRO",
                 "furgon": "FURGONE",
                 "bus": "BUS",
@@ -163,3 +163,48 @@ def process_file(path: Path):
     data_dict = result
     print(f"✅ Parsing completato: {data_dict['file_name']} ({len(data_dict['lines'])} righe)")
     start_review_server(data_dict)
+
+
+def process_batch(file_paths: list[Path]):
+    """
+    Esegue il parsing di più file e apre la WebUI per la batch review.
+
+    Args:
+        file_paths: Lista di Path ai file XML da processare
+
+    Returns:
+        Tuple (success_count, failed_files, parsed_documents)
+    """
+    from magecoshipping.webui.server import start_batch_review_server
+
+    print(f"📦 Elaborazione batch di {len(file_paths)} file...")
+
+    parsed_documents = []
+    failed_files = []
+
+    for path in file_paths:
+        print(f"📄 Elaborazione file: {path.name}")
+        ok, result = parse_file(path)
+
+        if not ok:
+            print(f"❌ Errore nel parsing di {path.name}: {result}")
+            failed_files.append((str(path), result))
+            continue
+
+        data_dict = result
+        parsed_documents.append(data_dict)
+        print(f"✅ Parsing completato: {data_dict['file_name']} ({len(data_dict['lines'])} righe)")
+
+    if parsed_documents:
+        print(f"\n📊 Batch elaborato: {len(parsed_documents)} documenti pronti per la review")
+        if failed_files:
+            print(f"⚠️  {len(failed_files)} file con errori:")
+            for file_path, error in failed_files:
+                print(f"   - {Path(file_path).name}: {error}")
+
+        # Avvia la WebUI per la batch review
+        start_batch_review_server(parsed_documents, failed_files)
+    else:
+        print("❌ Nessun documento valido nel batch")
+
+    return len(parsed_documents), failed_files, parsed_documents

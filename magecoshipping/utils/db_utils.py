@@ -42,7 +42,7 @@ def insert_or_get_supplier(fornitore: str, piva_fornitore: str) -> int:
     return supplier_id
 
 
-def insert_document(data: dict):
+def insert_document(data: dict, batch_id: int = None):
     """
     Inserisce un documento completo nel database, comprese le righe.
     """
@@ -53,8 +53,8 @@ def insert_document(data: dict):
     cur.execute("""
         INSERT INTO documents (
             file_name, cliente, piva_cliente, fornitore, piva_fornitore,
-            num_doc, data_doc, totale_doc, status, supplier_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            num_doc, data_doc, totale_doc, status, supplier_id, batch_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data.get("file_name"),
         data.get("cliente"),
@@ -66,6 +66,7 @@ def insert_document(data: dict):
         data.get("totale_doc") or data.get("costo"),
         data.get("status", "pending"),
         data.get("supplier_id"),
+        batch_id,
     ))
 
     document_id = cur.lastrowid
@@ -94,6 +95,106 @@ def insert_document(data: dict):
     conn.commit()
     conn.close()
     return document_id
+
+
+# ======================================
+# 🔹 Funzioni per gestire i batch
+# ======================================
+
+def create_batch(batch_name: str, num_documents: int = 0) -> int:
+    """
+    Crea un nuovo batch di acquisizione.
+    Ritorna l'ID del batch.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO batches (batch_name, num_documents, status)
+        VALUES (?, ?, 'pending')
+    """, (batch_name, num_documents))
+
+    batch_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return batch_id
+
+
+def get_batch(batch_id: int) -> dict | None:
+    """
+    Recupera un batch per ID.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, batch_name, num_documents, status, created_at
+        FROM batches
+        WHERE id = ?
+    """, (batch_id,))
+
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_batches(status_filter: str = None) -> list[dict]:
+    """
+    Recupera tutti i batch, opzionalmente filtrati per status.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    sql = "SELECT id, batch_name, num_documents, status, created_at FROM batches WHERE 1=1"
+    params = []
+
+    if status_filter:
+        sql += " AND status = ?"
+        params.append(status_filter)
+
+    sql += " ORDER BY created_at DESC"
+
+    cur.execute(sql, params)
+    rows = [dict(row) for row in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def update_batch_status(batch_id: int, status: str):
+    """
+    Aggiorna lo status di un batch.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE batches
+        SET status = ?
+        WHERE id = ?
+    """, (status, batch_id))
+
+    conn.commit()
+    conn.close()
+
+
+def get_documents_by_batch(batch_id: int) -> list[dict]:
+    """
+    Recupera tutti i documenti appartenenti a un batch.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, file_name, cliente, piva_cliente, fornitore, piva_fornitore,
+               data_doc, num_doc, totale_doc, status, created_at
+        FROM documents
+        WHERE batch_id = ?
+        ORDER BY created_at
+    """, (batch_id,))
+
+    rows = [dict(row) for row in cur.fetchall()]
+    conn.close()
+    return rows
 
 
 # ======================================
