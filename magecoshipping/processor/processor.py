@@ -71,7 +71,7 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
 
             # --- Regole di riconoscimento convenzioni ---
             tratta = re.search(r"\b[A-Z]{1,3}/[A-Z]{1,3}\b", descr.upper())
-            targa = re.search(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper())
+            targa = re.search(r"\b[A-Z]{2}\d{2,4}[A-Z]{2}\b", descr.upper())
 
             tipo_veicolo = "N/D"
             for key, tipo in {
@@ -93,7 +93,7 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
                                 dett.findtext("Quantita") or "1")
 
             # --- Ricerca targhe e tratta ---
-            targhe = re.findall(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper())
+            targhe = re.findall(r"\b[A-Z]{2}\d{2,4}[A-Z]{2}\b", descr.upper())
             tratta = re.search(r"\b[A-Z]{1,3}/[A-Z]{1,3}\b", descr.upper())
 
             # --- Quantità reale (numero di targhe individuate) ---

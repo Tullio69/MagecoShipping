@@ -100,7 +100,7 @@ def validate_text():
     """
     descr = request.json.get("descr", "")
     tratta = bool(re.search(r"\b[A-Z]{1,3}/[A-Z]{1,3}\b", descr.upper()))
-    targa = bool(re.search(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper()))
+    targa = bool(re.search(r"\b[A-Z]{2}\d{2,4}[A-Z]{2}\b", descr.upper()))
     tipo = any(k in descr.lower() for k in ["autovettur", "autocarro", "furgon", "bus", "pullman", "moto"])
     recognized = tratta or targa or tipo
     return flask.jsonify({"recognized": recognized})
