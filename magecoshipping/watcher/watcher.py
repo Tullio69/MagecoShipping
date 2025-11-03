@@ -71,11 +71,12 @@ class FolderWatcher:
     def start(self):
         print(f"🛰️ Watcher attivo su: {self.folder}")
 
-        # 1️⃣ Elabora subito i file già presenti
+        # 1️⃣ Elabora subito i file già presenti (usando lo stesso percorso di stabilità)
         for file in self.folder.glob("*.xml"):
             if is_supported(file):
                 print(f"📁 File pre-esistente trovato: {file}")
-                threading.Thread(target=self.event_handler.on_stable_file, args=(file,), daemon=True).start()
+                # Usa _wait_until_stable invece di chiamare on_stable_file direttamente
+                threading.Thread(target=self.event_handler._wait_until_stable, args=(file,), daemon=True).start()
 
         # 2️⃣ Avvia l'osservatore in tempo reale
         self.observer.schedule(self.event_handler, str(self.folder), recursive=False)

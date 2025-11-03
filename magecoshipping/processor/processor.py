@@ -1,7 +1,11 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import re
+import threading
 from magecoshipping.webui.server import start_review_server
+
+# Lock per serializzare l'elaborazione dei file
+_processing_lock = threading.Lock()
 
 
 def is_supported(path: Path) -> bool:
@@ -153,13 +157,20 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
 def process_file(path: Path):
     """
     Esegue il parsing completo e apre la WebUI per revisione / conferma.
+    Usa un lock per serializzare l'elaborazione ed evitare che più file
+    vengano processati contemporaneamente.
     """
-    print(f"📄 Elaborazione file: {path}")
-    ok, result = parse_file(path)
-    if not ok:
-        print(f"❌ Errore nel parsing: {result}")
-        return
+    with _processing_lock:
+        print(f"📄 Elaborazione file: {path}")
+        ok, result = parse_file(path)
+        if not ok:
+            print(f"❌ Errore nel parsing: {result}")
+            return
 
-    data_dict = result
-    print(f"✅ Parsing completato: {data_dict['file_name']} ({len(data_dict['lines'])} righe)")
-    start_review_server(data_dict)
+        data_dict = result
+        print(f"✅ Parsing completato: {data_dict['file_name']} ({len(data_dict['lines'])} righe)")
+        start_review_server(data_dict)
+
+        # Piccola pausa per assicurarsi che il browser si apra prima di processare il prossimo file
+        import time
+        time.sleep(1)

@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request, jsonify, flash, send_file
-from threading import Thread
+from threading import Thread, Lock
 import webbrowser
 from pathlib import Path
 from magecoshipping.utils.db_utils import insert_document, insert_or_get_supplier
 from magecoshipping.utils.fs_ops import move_with_retry
-from magecoshipping.utils import excel 
+from magecoshipping.utils import excel
 import re
 import secrets
 
@@ -12,6 +12,10 @@ import secrets
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
+
+# Variabili globali per gestire lo stato del server
+_server_running = False
+_server_lock = Lock()
 
 @app.route("/review", methods=["GET", "POST"])
 def review():
@@ -193,30 +197,50 @@ def _run_server():
     """
     Avvia il server Flask completo con tutte le route (review, dbview, edit, ecc.)
     """
-    app.run(port=5001, debug=False, use_reloader=False)
+    global _server_running
+    try:
+        app.run(port=5001, debug=False, use_reloader=False)
+    finally:
+        with _server_lock:
+            _server_running = False
 
 
 def start_review_server(data_dict=None, open_page="review"):
     """
     Avvia il server Flask e apre la pagina desiderata nel browser.
+    Se il server è già in esecuzione, aggiorna solo i dati e apre una nuova scheda.
 
     Esempi:
         start_review_server(data_dict)             -> apre /review
         start_review_server(open_page="dbview")    -> apre /dbview
     """
+    global _server_running
+
     if data_dict:
         app.config["current_data"] = data_dict
 
-    from threading import Thread
-    thread = Thread(target=_run_server, daemon=True)
-    thread.start()
+    # Controlla se il server è già in esecuzione
+    with _server_lock:
+        server_already_running = _server_running
 
-    # Attende mezzo secondo per consentire l'avvio del server
-    import time
-    time.sleep(0.5)
+        if not _server_running:
+            # Avvia il server solo se non è già in esecuzione
+            _server_running = True
+            from threading import Thread
+            thread = Thread(target=_run_server, daemon=True)
+            thread.start()
+            print("🌐 Server Flask avviato su porta 5001")
 
-    import webbrowser
-    webbrowser.open(f"http://localhost:5001/{open_page}")
+            # Attende mezzo secondo per consentire l'avvio del server
+            import time
+            time.sleep(0.5)
+        else:
+            print("🌐 Server Flask già in esecuzione, aggiornamento dati...")
+
+    # Apri il browser solo se ci sono nuovi dati da visualizzare
+    if data_dict:
+        import webbrowser
+        webbrowser.open(f"http://localhost:5001/{open_page}")
 
 
 from magecoshipping.utils.db_utils import get_documents
