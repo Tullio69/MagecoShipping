@@ -13,6 +13,12 @@ import secrets
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
+# Aggiungi filtro custom per ottenere il basename di un path
+@app.template_filter('basename')
+def basename_filter(path):
+    """Filtro Jinja2 per ottenere solo il nome del file da un path."""
+    return Path(path).name
+
 @app.route("/review", methods=["GET", "POST"])
 def review():
     """

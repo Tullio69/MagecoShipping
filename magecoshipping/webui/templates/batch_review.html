@@ -182,10 +182,15 @@
       <h2>📦 Batch Review - Documenti Multipli</h2>
       <p>Revisiona e conferma ciascun documento del batch</p>
       <div class="batch-progress">
-        {% set processed_count = batch_documents | selectattr('_processed', 'defined') | selectattr('_processed') | list | length %}
-        {% set progress_percent = (processed_count / total_documents * 100) | int %}
+        {% set processed_count = namespace(count=0) %}
+        {% for doc in batch_documents %}
+          {% if doc.get('_processed') %}
+            {% set processed_count.count = processed_count.count + 1 %}
+          {% endif %}
+        {% endfor %}
+        {% set progress_percent = (processed_count.count / total_documents * 100) | int %}
         <div class="batch-progress-bar" style="width: {{ progress_percent }}%;">
-          {{ processed_count }} / {{ total_documents }} documenti processati
+          {{ processed_count.count }} / {{ total_documents }} documenti processati
         </div>
       </div>
     </div>
@@ -204,10 +209,10 @@
     <div class="navigation">
       <div class="doc-status">
         {% for doc in batch_documents %}
-        <div class="doc-status-item {% if loop.index0 == current_index %}current{% elif doc._processed %}processed{% endif %}">
+        <div class="doc-status-item {% if loop.index0 == current_index %}current{% elif doc.get('_processed') %}processed{% endif %}">
           {{ loop.index }}. {{ doc.file_name | truncate(20) }}
-          {% if doc._processed %}
-            {% if doc._action == 'reject' %}🚫{% else %}✅{% endif %}
+          {% if doc.get('_processed') %}
+            {% if doc.get('_action') == 'reject' %}🚫{% else %}✅{% endif %}
           {% endif %}
         </div>
         {% endfor %}
@@ -283,8 +288,13 @@
         <button type="submit" name="action" value="correct">✏️ Correggi e conferma</button>
         <button type="submit" name="action" value="reject">❌ Rifiuta documento</button>
 
-        {% set all_processed = batch_documents | selectattr('_processed', 'defined') | selectattr('_processed') | list | length == total_documents %}
-        {% if all_processed %}
+        {% set all_processed_check = namespace(all_done=true) %}
+        {% for doc in batch_documents %}
+          {% if not doc.get('_processed') %}
+            {% set all_processed_check.all_done = false %}
+          {% endif %}
+        {% endfor %}
+        {% if all_processed_check.all_done %}
         <button type="submit" name="action" value="confirm_batch" style="background: #667eea; font-size: 1.1rem;">
           🎯 Conferma Batch Completo
         </button>
