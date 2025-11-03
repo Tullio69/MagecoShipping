@@ -4,9 +4,17 @@ from pathlib import Path
 # Percorso del database
 DB_PATH = Path(__file__).resolve().parent / "database.sqlite3"
 
+def check_column_exists(cursor, table_name: str, column_name: str) -> bool:
+    """Verifica se una colonna esiste in una tabella."""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = [row[1] for row in cursor.fetchall()]
+    return column_name in columns
+
+
 def init_db():
     """
     Crea o aggiorna il database SQLite con le tabelle aggiornate.
+    Include migrazione automatica per aggiungere batch_id se necessario.
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -84,6 +92,12 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
+
+        # Migrazione: Aggiungi batch_id se non esiste
+        if not check_column_exists(c, 'documents', 'batch_id'):
+            print("⚙️  Migrazione: aggiunta colonna 'batch_id' alla tabella 'documents'...")
+            c.execute("ALTER TABLE documents ADD COLUMN batch_id INTEGER")
+            print("✅ Migrazione completata")
 
         conn.commit()
         print(f"✅ Database inizializzato in: {DB_PATH}")
