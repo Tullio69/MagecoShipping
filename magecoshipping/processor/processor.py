@@ -1,7 +1,11 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import re
-from magecoshipping.webui.server import start_review_server
+import threading
+from magecoshipping.webui.server import start_review_server, start_batch_review_server
+
+# Lock per serializzare l'elaborazione dei file
+_processing_lock = threading.Lock()
 
 
 def is_supported(path: Path) -> bool:
@@ -67,7 +71,7 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
 
             # --- Regole di riconoscimento convenzioni ---
             tratta = re.search(r"\b[A-Z]{1,3}/[A-Z]{1,3}\b", descr.upper())
-            targa = re.search(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper())
+            targa = re.search(r"\b[A-Z]{2}\d{2,4}[A-Z]{2}\b", descr.upper())
 
             tipo_veicolo = "N/D"
             for key, tipo in {
@@ -89,7 +93,7 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
                                 dett.findtext("Quantita") or "1")
 
             # --- Ricerca targhe e tratta ---
-            targhe = re.findall(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper())
+            targhe = re.findall(r"\b[A-Z]{2}\d{2,4}[A-Z]{2}\b", descr.upper())
             tratta = re.search(r"\b[A-Z]{1,3}/[A-Z]{1,3}\b", descr.upper())
 
             # --- Quantità reale (numero di targhe individuate) ---
@@ -153,13 +157,53 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
 def process_file(path: Path):
     """
     Esegue il parsing completo e apre la WebUI per revisione / conferma.
+    DEPRECATO: Questa funzione è stata sostituita da process_batch_files.
+    Mantenuta per compatibilità ma non dovrebbe essere usata.
     """
-    print(f"📄 Elaborazione file: {path}")
-    ok, result = parse_file(path)
-    if not ok:
-        print(f"❌ Errore nel parsing: {result}")
-        return
+    with _processing_lock:
+        print(f"📄 Elaborazione file: {path}")
+        ok, result = parse_file(path)
+        if not ok:
+            print(f"❌ Errore nel parsing: {result}")
+            return
 
-    data_dict = result
-    print(f"✅ Parsing completato: {data_dict['file_name']} ({len(data_dict['lines'])} righe)")
-    start_review_server(data_dict)
+        data_dict = result
+        print(f"✅ Parsing completato: {data_dict['file_name']} ({len(data_dict['lines'])} righe)")
+
+        # Anche un singolo file viene processato in modalità batch
+        process_batch_files([path])
+
+
+def process_batch_files(file_paths: list[Path]):
+    """
+    Elabora un batch di file XML e apre l'interfaccia batch-review.
+
+    Args:
+        file_paths: Lista di Path ai file XML da elaborare
+    """
+    with _processing_lock:
+        print(f"📦 Elaborazione batch di {len(file_paths)} file(s)")
+
+        batch_documents = []
+        failed_files = []
+
+        for path in file_paths:
+            print(f"📄 Parsing: {path.name}")
+            ok, result = parse_file(path)
+
+            if ok:
+                batch_documents.append(result)
+                riconosciute = len([l for l in result['lines'] if l['recognized']])
+                print(f"   ✅ {riconosciute}/{len(result['lines'])} righe riconosciute")
+            else:
+                failed_files.append({"path": path.name, "error": result})
+                print(f"   ❌ Errore: {result}")
+
+        if not batch_documents and not failed_files:
+            print("⚠️ Nessun file da elaborare")
+            return
+
+        print(f"\n🎯 Batch pronto: {len(batch_documents)} documento(i) valido(i), {len(failed_files)} errore(i)")
+
+        # Apri l'interfaccia batch-review
+        start_batch_review_server(batch_documents, failed_files)

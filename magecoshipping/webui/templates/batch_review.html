@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Batch Review - MagecoShipping</title>
+  <style>
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #f4f6f8;
+    margin: 2rem;
+  }
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .batch-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+  .batch-header h2 {
+    margin: 0 0 0.5rem 0;
+  }
+  .batch-progress {
+    background: rgba(255,255,255,0.2);
+    border-radius: 20px;
+    height: 30px;
+    overflow: hidden;
+    margin-top: 1rem;
+  }
+  .batch-progress-bar {
+    background: #4CAF50;
+    height: 100%;
+    transition: width 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.9rem;
+  }
+  .navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+  .nav-buttons button {
+    padding: 0.6rem 1.2rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    background: #667eea;
+    color: white;
+    margin: 0 0.3rem;
+  }
+  .nav-buttons button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+  .doc-status {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .doc-status-item {
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    background: #e0e0e0;
+  }
+  .doc-status-item.current {
+    background: #667eea;
+    color: white;
+    font-weight: bold;
+  }
+  .doc-status-item.processed {
+    background: #4CAF50;
+    color: white;
+  }
+  .header {
+    background: #fff;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    table-layout: fixed;
+  }
+  th, td {
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid #eee;
+    font-size: 0.85rem;
+    word-wrap: break-word;
+  }
+  th {
+    background: #f9f9f9;
+    font-weight: 600;
+    text-align: left;
+  }
+  tr.unrecognized {
+    background: #fff5f5;
+    color: #a33;
+  }
+  th:nth-child(1), td:nth-child(1) { width: 4%; text-align: center; }
+  th:nth-child(2), td:nth-child(2) { width: 38%; }
+  th:nth-child(3), td:nth-child(3) { width: 8%; text-align: center; }
+  th:nth-child(4), td:nth-child(4) { width: 15%; }
+  th:nth-child(5), td:nth-child(5) { width: 12%; }
+  th:nth-child(6), td:nth-child(6),
+  th:nth-child(7), td:nth-child(7) { width: 6%; text-align: right; }
+  th:nth-child(8), td:nth-child(8) { width: 8%; text-align: right; }
+  th:nth-child(9), td:nth-child(9),
+  th:nth-child(10), td:nth-child(10) { width: 4%; text-align: center; }
+  td input {
+    width: 100%;
+    padding: 0.3rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+  td input[type="number"] { text-align: right; }
+  td input[type="checkbox"] { width: auto; }
+  .buttons {
+    margin-top: 1.5rem;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  button {
+    padding: 0.8rem 1.6rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s;
+  }
+  button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  }
+  button[value="confirm"] { background: #4CAF50; color: white; }
+  button[value="correct"] { background: #f0ad4e; color: white; }
+  button[value="reject"] { background: #d9534f; color: white; }
+  button[value="confirm_batch"] { background: #667eea; color: white; font-weight: bold; }
+  .failed-files {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+  .failed-files h4 {
+    margin: 0 0 0.5rem 0;
+    color: #856404;
+  }
+  .failed-files ul {
+    margin: 0;
+    padding-left: 1.5rem;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="batch-header">
+      <h2>📦 Batch Review - Documenti Multipli</h2>
+      <p>Revisiona e conferma ciascun documento del batch</p>
+      <div class="batch-progress">
+        {% set processed_count = namespace(count=0) %}
+        {% for doc in batch_documents %}
+          {% if doc.get('_processed') %}
+            {% set processed_count.count = processed_count.count + 1 %}
+          {% endif %}
+        {% endfor %}
+        {% set progress_percent = (processed_count.count / total_documents * 100) | int %}
+        <div class="batch-progress-bar" style="width: {{ progress_percent }}%;">
+          {{ processed_count.count }} / {{ total_documents }} documenti processati
+        </div>
+      </div>
+    </div>
+
+    {% if failed_files %}
+    <div class="failed-files">
+      <h4>⚠️ File con errori di parsing ({{ failed_files|length }})</h4>
+      <ul>
+        {% for file_info in failed_files %}
+        <li>{{ file_info.path }}: {{ file_info.error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="navigation">
+      <div class="doc-status">
+        {% for doc in batch_documents %}
+        <div class="doc-status-item {% if loop.index0 == current_index %}current{% elif doc.get('_processed') %}processed{% endif %}">
+          {{ loop.index }}. {{ doc.file_name[:20] }}
+          {% if doc.get('_processed') %}
+            {% if doc.get('_action') == 'reject' %}🚫{% else %}✅{% endif %}
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <form method="post" style="display: inline;">
+        <input type="hidden" name="action" value="navigate">
+        <div class="nav-buttons">
+          <button type="submit" name="direction" value="prev" {% if current_index == 0 %}disabled{% endif %}>
+            ← Precedente
+          </button>
+          <span style="margin: 0 1rem; font-weight: bold;">
+            Documento {{ current_index + 1 }} di {{ total_documents }}
+          </span>
+          <button type="submit" name="direction" value="next" {% if current_index >= total_documents - 1 %}disabled{% endif %}>
+            Successivo →
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div class="header">
+      <h3>📄 {{ data.file_name }}</h3>
+      <p><b>Cliente:</b> {{ data.cliente }} — <b>P.IVA:</b> {{ data.piva_cliente }}</p>
+      <p><b>Fornitore:</b> {{ data.fornitore }} — <b>P.IVA:</b> {{ data.piva_fornitore }}</p>
+      <p><b>Numero:</b> {{ data.num_doc }} — <b>Data:</b> {{ data.data_doc }} — <b>Totale:</b> {{ data.totale_doc }}</p>
+    </div>
+
+    <form method="post">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Descrizione</th>
+            <th>Tratta</th>
+            <th>Targhe</th>
+            <th>Tipo Veicolo</th>
+            <th>Q. Fattura</th>
+            <th>Q. Reale</th>
+            <th>Costo (€)</th>
+            <th>✔️</th>
+            <th>Includi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+          <tr id="row{{ loop.index0 }}" class="{% if not line.recognized %}unrecognized{% endif %}">
+            <td>{{ loop.index }}</td>
+            <td><input type="text" name="line_{{ loop.index0 }}_descrizione_rigo"
+                       value="{{ line.descrizione_rigo }}" oninput="validateLine({{ loop.index0 }})"></td>
+            <td><input type="text" name="line_{{ loop.index0 }}_tratta" value="{{ line.tratta }}"></td>
+            <td><input type="text" name="line_{{ loop.index0 }}_targhe" value="{{ line.targhe }}"></td>
+            <td><input type="text" name="line_{{ loop.index0 }}_tipo_veicolo" value="{{ line.tipo_veicolo }}"></td>
+            <td><input type="number" step="0.01" name="line_{{ loop.index0 }}_quantita_fattura"
+                       value="{{ line.quantita_fattura }}"></td>
+            <td><input type="number" step="0.01" name="line_{{ loop.index0 }}_quantita_reale"
+                       value="{{ line.quantita_reale }}"></td>
+            <td><input type="number" step="0.01" name="line_{{ loop.index0 }}_costo" value="{{ line.costo }}"></td>
+            <td class="center">
+              {% if line.recognized %}✔️{% else %}❌{% endif %}
+              <input type="hidden" name="line_{{ loop.index0 }}_recognized" value="{{ line.recognized }}">
+            </td>
+            <td class="center">
+              <input type="checkbox" name="line_{{ loop.index0 }}_include" {% if line.include %}checked{% endif %}>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="buttons">
+        <button type="submit" name="action" value="confirm">✅ Conferma questo documento</button>
+        <button type="submit" name="action" value="correct">✏️ Correggi e conferma</button>
+        <button type="submit" name="action" value="reject">❌ Rifiuta documento</button>
+
+        {% set all_processed_check = namespace(all_done=true) %}
+        {% for doc in batch_documents %}
+          {% if not doc.get('_processed') %}
+            {% set all_processed_check.all_done = false %}
+          {% endif %}
+        {% endfor %}
+        {% if all_processed_check.all_done %}
+        <button type="submit" name="action" value="confirm_batch" style="background: #667eea; font-size: 1.1rem;">
+          🎯 Conferma Batch Completo
+        </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <script>
+    async function validateLine(index) {
+      const input = document.querySelector(`[name="line_${index}_descrizione_rigo"]`);
+      const row = document.getElementById(`row${index}`);
+      const value = input.value.trim();
+
+      const response = await fetch("/validate_text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descr: value })
+      });
+      const data = await response.json();
+      const recognized = data.recognized;
+
+      row.classList.toggle("unrecognized", !recognized);
+      document.querySelector(`[name="line_${index}_recognized"]`).value = recognized;
+      const centerCell = row.querySelectorAll("td.center")[0];
+      centerCell.innerHTML = recognized ? "✔️" : "❌" + centerCell.querySelector("input").outerHTML;
+    }
+  </script>
+</body>
+</html>

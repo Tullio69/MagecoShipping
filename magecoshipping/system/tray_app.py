@@ -55,27 +55,23 @@ icon: pystray.Icon | None = None
 
 
 
-# ---- CALLBACK quando un file è stabile nella cartella ----
-from magecoshipping.processor.processor import is_supported, process_file
+# ---- CALLBACK quando un batch di file è pronto ----
+from magecoshipping.processor.processor import is_supported, process_batch_files
 
-def on_file_ready(path: Path):
+def on_batch_ready(file_paths: list[Path]):
     """
-    Callback chiamata quando un file stabile viene trovato nella cartella osservata.
-    Esegue il parsing e apre la revisione WebUI per conferma / correzione / rifiuto.
+    Callback chiamata quando un batch di file stabili è pronto per essere processato.
+    Esegue il parsing di tutti i file e apre la WebUI batch-review.
     """
     if paused:
         return
 
-    # 1️⃣ Verifica che sia un XML supportato
-    if not is_supported(path):
-        return
-
-    # 2️⃣ Avvia il processo di parsing + WebUI di revisione
+    # Avvia il processo di parsing batch + WebUI di revisione
     try:
-        print(f"📄 File stabile trovato: {path}")
-        process_file(path)
+        print(f"📦 Batch di {len(file_paths)} file(s) pronto per l'elaborazione")
+        process_batch_files(file_paths)
     except Exception as e:
-        show_modal("Errore di elaborazione ❌", f"Si è verificato un errore durante l'elaborazione del file:\n\n{path}\n\nDettagli: {e}")
+        show_modal("Errore di elaborazione ❌", f"Si è verificato un errore durante l'elaborazione del batch:\n\nDettagli: {e}")
 
 
 # ---- HANDLERS MENU ----
@@ -182,7 +178,7 @@ def create_icon():
 
 def _start_watcher():
     global watcher
-    watcher = FolderWatcher(str(WATCH_PATH), on_stable_file=on_file_ready, stable_seconds=3.0)
+    watcher = FolderWatcher(str(WATCH_PATH), on_stable_file=on_batch_ready, stable_seconds=3.0, batch_timeout=5.0)
     watcher.start()
 
 # ---- MAIN ----

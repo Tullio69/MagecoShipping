@@ -1,10 +1,10 @@
-from flask import Flask, render_template, request, jsonify, flash, send_file
-from threading import Thread
+from flask import Flask, render_template, request, jsonify, flash, send_file, redirect, url_for
+from threading import Thread, Lock
 import webbrowser
 from pathlib import Path
 from magecoshipping.utils.db_utils import insert_document, insert_or_get_supplier
 from magecoshipping.utils.fs_ops import move_with_retry
-from magecoshipping.utils import excel 
+from magecoshipping.utils import excel
 import re
 import secrets
 
@@ -12,6 +12,10 @@ import secrets
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
+
+# Variabili globali per gestire lo stato del server
+_server_running = False
+_server_lock = Lock()
 
 @app.route("/review", methods=["GET", "POST"])
 def review():
@@ -96,7 +100,7 @@ def validate_text():
     """
     descr = request.json.get("descr", "")
     tratta = bool(re.search(r"\b[A-Z]{1,3}/[A-Z]{1,3}\b", descr.upper()))
-    targa = bool(re.search(r"\b[A-Z]{2}\d{3,4}[A-Z]{2}\b", descr.upper()))
+    targa = bool(re.search(r"\b[A-Z]{2}\d{2,4}[A-Z]{2}\b", descr.upper()))
     tipo = any(k in descr.lower() for k in ["autovettur", "autocarro", "furgon", "bus", "pullman", "moto"])
     recognized = tratta or targa or tipo
     return flask.jsonify({"recognized": recognized})
@@ -189,34 +193,205 @@ def open_export_folder():
         return flask.jsonify({"success": False, "message": str(e)}), 500
 
 
+@app.route("/batch-review", methods=["GET", "POST"])
+def batch_review():
+    """
+    Modalità batch: permette di revisionare più documenti in sequenza.
+    """
+    # Carica batch da app.config (non session perché non funziona con daemon thread)
+    batch_documents = app.config.get("batch_documents", [])
+    failed_files = app.config.get("failed_files", [])
+    current_index = app.config.get("current_index", 0)
+
+    if not batch_documents:
+        return render_template("result.html", message="⚠️ Nessun batch di documenti da revisionare.")
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        # Navigazione
+        if action == "navigate":
+            direction = request.form.get("direction")
+            if direction == "prev" and current_index > 0:
+                current_index -= 1
+            elif direction == "next" and current_index < len(batch_documents) - 1:
+                current_index += 1
+            app.config["current_index"] = current_index
+            return redirect(url_for("batch_review"))
+
+        # Conferma batch completo
+        if action == "confirm_batch":
+            app.config["batch_documents"] = []
+            app.config["failed_files"] = []
+            app.config["current_index"] = 0
+            return render_template("result.html", message="✅ Batch completo! Tutti i documenti sono stati processati.")
+
+        # Aggiorna righe dal form
+        updated_lines = []
+        i = 0
+        while True:
+            prefix = f"line_{i}_"
+            if f"{prefix}descrizione_rigo" not in request.form:
+                break
+            updated_lines.append({
+                "descrizione_rigo": request.form.get(f"{prefix}descrizione_rigo", ""),
+                "tratta": request.form.get(f"{prefix}tratta", ""),
+                "targhe": request.form.get(f"{prefix}targhe", ""),
+                "tipo_veicolo": request.form.get(f"{prefix}tipo_veicolo", ""),
+                "quantita_fattura": float(request.form.get(f"{prefix}quantita_fattura", 1)),
+                "quantita_reale": float(request.form.get(f"{prefix}quantita_reale", 1)),
+                "costo": float(request.form.get(f"{prefix}costo", 0)),
+                "recognized": request.form.get(f"{prefix}recognized") == "True",
+                "include": f"{prefix}include" in request.form
+            })
+            i += 1
+
+        batch_documents[current_index]["lines"] = updated_lines
+
+        # Percorsi
+        original_path = Path(batch_documents[current_index].get("original_path"))
+        processed_dir = Path(__file__).resolve().parents[2] / "processed"
+        errors_dir = Path(__file__).resolve().parents[2] / "errors"
+
+        if action in ("confirm", "correct"):
+            try:
+                # Controlla o crea il fornitore
+                supplier_id = insert_or_get_supplier(
+                    fornitore=batch_documents[current_index].get("fornitore"),
+                    piva_fornitore=batch_documents[current_index].get("piva_fornitore")
+                )
+                batch_documents[current_index]["supplier_id"] = supplier_id
+                batch_documents[current_index]["status"] = "validated"
+                insert_document(batch_documents[current_index])
+                move_with_retry(original_path, processed_dir)
+
+                # Marca come processato
+                batch_documents[current_index]["_processed"] = True
+                batch_documents[current_index]["_action"] = "confirm"
+
+            except Exception as e:
+                flash(f"❌ Errore nel salvataggio: {e}", "error")
+
+        elif action == "reject":
+            try:
+                move_with_retry(original_path, errors_dir)
+                batch_documents[current_index]["_processed"] = True
+                batch_documents[current_index]["_action"] = "reject"
+            except Exception as e:
+                flash(f"❌ Errore durante il rifiuto: {e}", "error")
+
+        # Salva aggiornamenti in app.config
+        app.config["batch_documents"] = batch_documents
+
+        # Vai al prossimo documento non processato
+        next_index = current_index
+        for i in range(current_index + 1, len(batch_documents)):
+            if not batch_documents[i].get("_processed"):
+                next_index = i
+                break
+
+        if next_index != current_index:
+            app.config["current_index"] = next_index
+
+        return redirect(url_for("batch_review"))
+
+    # GET request - mostra documento corrente
+    data = batch_documents[current_index]
+    lines = data.get("lines", [])
+
+    return render_template(
+        "batch_review.html",
+        data=data,
+        lines=lines,
+        batch_documents=batch_documents,
+        failed_files=failed_files,
+        current_index=current_index,
+        total_documents=len(batch_documents)
+    )
+
+
 def _run_server():
     """
     Avvia il server Flask completo con tutte le route (review, dbview, edit, ecc.)
     """
-    app.run(port=5001, debug=False, use_reloader=False)
+    global _server_running
+    try:
+        app.run(port=5001, debug=False, use_reloader=False)
+    finally:
+        with _server_lock:
+            _server_running = False
+
+
+def start_batch_review_server(batch_documents, failed_files=None):
+    """
+    Avvia il server Flask in modalità batch-review con più documenti.
+
+    Args:
+        batch_documents: Lista di dizionari contenenti i dati dei documenti
+        failed_files: Lista di file che hanno avuto errori di parsing (opzionale)
+    """
+    global _server_running
+
+    # Prepara i dati della sessione (usando app.config per simulare session)
+    app.config["batch_documents"] = batch_documents
+    app.config["failed_files"] = failed_files or []
+    app.config["current_index"] = 0
+
+    # Avvia il server se non è già in esecuzione
+    with _server_lock:
+        if not _server_running:
+            _server_running = True
+            from threading import Thread
+            thread = Thread(target=_run_server, daemon=True)
+            thread.start()
+            print("🌐 Server Flask avviato su porta 5001 (modalità batch)")
+
+            import time
+            time.sleep(0.5)
+        else:
+            print("🌐 Server Flask già in esecuzione, modalità batch attivata...")
+
+    # Apri il browser sulla pagina batch-review
+    import webbrowser
+    webbrowser.open("http://localhost:5001/batch-review")
 
 
 def start_review_server(data_dict=None, open_page="review"):
     """
     Avvia il server Flask e apre la pagina desiderata nel browser.
+    Se il server è già in esecuzione, aggiorna solo i dati e apre una nuova scheda.
 
     Esempi:
         start_review_server(data_dict)             -> apre /review
         start_review_server(open_page="dbview")    -> apre /dbview
     """
+    global _server_running
+
     if data_dict:
         app.config["current_data"] = data_dict
 
-    from threading import Thread
-    thread = Thread(target=_run_server, daemon=True)
-    thread.start()
+    # Controlla se il server è già in esecuzione
+    with _server_lock:
+        server_already_running = _server_running
 
-    # Attende mezzo secondo per consentire l'avvio del server
-    import time
-    time.sleep(0.5)
+        if not _server_running:
+            # Avvia il server solo se non è già in esecuzione
+            _server_running = True
+            from threading import Thread
+            thread = Thread(target=_run_server, daemon=True)
+            thread.start()
+            print("🌐 Server Flask avviato su porta 5001")
 
-    import webbrowser
-    webbrowser.open(f"http://localhost:5001/{open_page}")
+            # Attende mezzo secondo per consentire l'avvio del server
+            import time
+            time.sleep(0.5)
+        else:
+            print("🌐 Server Flask già in esecuzione, aggiornamento dati...")
+
+    # Apri il browser solo se ci sono nuovi dati da visualizzare
+    if data_dict:
+        import webbrowser
+        webbrowser.open(f"http://localhost:5001/{open_page}")
 
 
 from magecoshipping.utils.db_utils import get_documents
