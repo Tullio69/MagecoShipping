@@ -2,7 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 import re
 import threading
-from magecoshipping.webui.server import start_review_server
+from magecoshipping.webui.server import start_review_server, start_batch_review_server
 
 # Lock per serializzare l'elaborazione dei file
 _processing_lock = threading.Lock()
@@ -157,8 +157,8 @@ def parse_file(path: Path) -> tuple[bool, dict | str]:
 def process_file(path: Path):
     """
     Esegue il parsing completo e apre la WebUI per revisione / conferma.
-    Usa un lock per serializzare l'elaborazione ed evitare che più file
-    vengano processati contemporaneamente.
+    DEPRECATO: Questa funzione è stata sostituita da process_batch_files.
+    Mantenuta per compatibilità ma non dovrebbe essere usata.
     """
     with _processing_lock:
         print(f"📄 Elaborazione file: {path}")
@@ -169,8 +169,41 @@ def process_file(path: Path):
 
         data_dict = result
         print(f"✅ Parsing completato: {data_dict['file_name']} ({len(data_dict['lines'])} righe)")
-        start_review_server(data_dict)
 
-        # Piccola pausa per assicurarsi che il browser si apra prima di processare il prossimo file
-        import time
-        time.sleep(1)
+        # Anche un singolo file viene processato in modalità batch
+        process_batch_files([path])
+
+
+def process_batch_files(file_paths: list[Path]):
+    """
+    Elabora un batch di file XML e apre l'interfaccia batch-review.
+
+    Args:
+        file_paths: Lista di Path ai file XML da elaborare
+    """
+    with _processing_lock:
+        print(f"📦 Elaborazione batch di {len(file_paths)} file(s)")
+
+        batch_documents = []
+        failed_files = []
+
+        for path in file_paths:
+            print(f"📄 Parsing: {path.name}")
+            ok, result = parse_file(path)
+
+            if ok:
+                batch_documents.append(result)
+                riconosciute = len([l for l in result['lines'] if l['recognized']])
+                print(f"   ✅ {riconosciute}/{len(result['lines'])} righe riconosciute")
+            else:
+                failed_files.append({"path": path.name, "error": result})
+                print(f"   ❌ Errore: {result}")
+
+        if not batch_documents and not failed_files:
+            print("⚠️ Nessun file da elaborare")
+            return
+
+        print(f"\n🎯 Batch pronto: {len(batch_documents)} documento(i) valido(i), {len(failed_files)} errore(i)")
+
+        # Apri l'interfaccia batch-review
+        start_batch_review_server(batch_documents, failed_files)
